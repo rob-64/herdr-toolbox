@@ -99,7 +99,7 @@ describe('plan', () => {
     assert.equal(renames.length, 1);
   });
 
-  it('drops ownership when agent leaves', () => {
+  it('keeps ownership of bare label when agent leaves', () => {
     const label = `${OMO} ◐ Fix login`;
     const snapshot = snap([tab('w0:t1', label)]);
     const { renames, state } = plan(
@@ -108,7 +108,25 @@ describe('plan', () => {
       defaultConfig,
     );
     assert.equal(renames[0].label, 'Fix login');
-    assert.equal(state.owned['w0:t1'], undefined);
+    assert.equal(state.owned['w0:t1'], 'Fix login');
+  });
+
+  it('reclaims tab when agent returns after bare rename', () => {
+    const label = `${OMO} ◐ Fix login`;
+    const snapshot = snap([tab('w0:t1', label)]);
+    const first = plan(
+      snapshot,
+      { owned: { 'w0:t1': label }, released: [] },
+      defaultConfig,
+    );
+    assert.equal(first.renames[0].label, 'Fix login');
+    assert.equal(first.state.owned['w0:t1'], 'Fix login');
+
+    const restored = snap([tab('w0:t1', 'Fix login')], [agent('w0:p1', 'w0:t1')]);
+    const second = plan(restored, first.state, defaultConfig);
+    assert.equal(second.renames.length, 1);
+    assert.equal(second.renames[0].label, `${OMO} ◐ Fix login`);
+    assert.equal(second.state.owned['w0:t1'], `${OMO} ◐ Fix login`);
   });
 
   it('does not touch unowned tab without agents', () => {

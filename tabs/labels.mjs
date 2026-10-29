@@ -175,7 +175,7 @@ export function plan(snapshot, state, config) {
         if (bare !== tab.label) {
           renames.push({ tab_id: tabId, label: bare });
         }
-        delete owned[tabId];
+        owned[tabId] = bare;
       }
       continue;
     }
