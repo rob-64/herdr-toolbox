@@ -70,6 +70,21 @@ function cleanTitle(title) {
     .trim();
 }
 
+/**
+ * Last path segment of a directory path (no node:path).
+ * @param {string | undefined | null} path
+ */
+export function folderName(path) {
+  if (typeof path !== 'string' || path.length === 0) return '';
+  const trimmed = path.replace(/\/+$/, '');
+  if (trimmed === '' || trimmed === '/') return '';
+  const parts = trimmed.split('/');
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i] !== '') return parts[i];
+  }
+  return '';
+}
+
 function truncateTitle(text, maxTitle) {
   const max = maxTitle ?? 32;
   if (text.length <= max) return text;
@@ -182,6 +197,9 @@ export function plan(snapshot, state, config) {
 
     const primary = pickPrimaryAgent(agents);
     let base = cleanTitle(primary?.title);
+    if (!base) {
+      base = folderName(primary?.foreground_cwd || primary?.cwd);
+    }
     if (!base) {
       if (owned[tabId] !== undefined) {
         base = stripPrefix(owned[tabId]);

@@ -126,7 +126,7 @@ bin/agents-board --json --scope session --session-pane w11:p1
 
 Makes tabs usable with OmO agents:
 
-- **Automatic tab titles** from each agent's task title (not the live terminal title).
+- **Automatic tab titles** from each agent's task title (not the live terminal title). Before the agent has a task title, the tab shows the agent's folder name (last segment of its working directory).
 - **Icons and status** in the tab bar, e.g. `󰧟 ◐ Fix merge conflicts PR 7`.
 - **Last tab** action — MRU alt-tab across workspaces.
 

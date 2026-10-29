@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_ICONS,
+  folderName,
   glyphFor,
   iconFor,
   plan,
@@ -148,13 +149,13 @@ describe('plan', () => {
     assert.match(renames[0].label, /◉/);
   });
 
-  it('uses tab number when title missing', () => {
+  it('uses tab number when title missing and agent has no cwd', () => {
     const snapshot = snap([tab('w0:t1', '1', 7)], [agent('w0:p1', 'w0:t1', { title: null })]);
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
     assert.match(renames[0].label, /7$/);
   });
 
-  it('keeps previous base when owned and title missing', () => {
+  it('keeps previous base when owned and title missing and agent has no cwd', () => {
     const label = `${OMO} ◐ Keep this base`;
     const snapshot = snap(
       [tab('w0:t1', label)],
@@ -166,6 +167,45 @@ describe('plan', () => {
       defaultConfig,
     );
     assert.equal(renames.length, 0);
+  });
+
+  it('uses folder name when title missing and cwd is set', () => {
+    const snapshot = snap(
+      [tab('w0:t1', '1', 1)],
+      [
+        agent('w0:p1', 'w0:t1', {
+          title: null,
+          cwd: '/Users/x/w/scratch',
+          agent_status: 'working',
+        }),
+      ],
+    );
+    const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
+    assert.equal(renames[0].label, `${OMO} ◐ scratch`);
+  });
+
+  it('prefers foreground_cwd over cwd for folder name', () => {
+    const snapshot = snap(
+      [tab('w0:t1', '1')],
+      [
+        agent('w0:p1', 'w0:t1', {
+          title: null,
+          cwd: '/a/old',
+          foreground_cwd: '/a/new',
+        }),
+      ],
+    );
+    const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
+    assert.match(renames[0].label, /new$/);
+  });
+
+  it('uses task title over folder name when both present', () => {
+    const snapshot = snap(
+      [tab('w0:t1', '1')],
+      [agent('w0:p1', 'w0:t1', { title: 'Fix login', cwd: '/Users/x/w/scratch' })],
+    );
+    const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
+    assert.match(renames[0].label, /Fix login$/);
   });
 
   it('truncates long titles', () => {
@@ -256,6 +296,20 @@ describe('plan', () => {
     const snapshot = snap([tab('w0:t1', 'my tab')], [agent('w0:p1', 'w0:t1')]);
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
     assert.equal(renames.length, 0);
+  });
+});
+
+describe('folderName', () => {
+  it('returns last segment with trailing slash', () => {
+    assert.equal(folderName('/a/b/'), 'b');
+  });
+
+  it('returns empty for root', () => {
+    assert.equal(folderName('/'), '');
+  });
+
+  it('returns empty for non-string', () => {
+    assert.equal(folderName(undefined), '');
   });
 });
 
