@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 
-const PLUGIN = "herdr-omo-agents";
+const PLUGIN = "herdr-omo-toolbox";
 
 const MODES = [
 	{ name: "split", help: "split to the right, keep focus here (default)", args: (pane) => ["--entrypoint", "side", "--placement", "split", "--direction", "right", "--target-pane", pane, "--no-focus"] },

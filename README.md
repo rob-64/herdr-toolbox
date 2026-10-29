@@ -1,6 +1,26 @@
-# herdr-omo-agents
+# herdr-omo-toolbox
 
-A [herdr](https://herdr.dev) plugin that shows every [OmO](https://github.com/code-yeongyu/oh-my-openagent) subagent and DAG run in one live board: status, agent, task, model, elapsed time, and what each running agent is doing right now.
+A [herdr](https://herdr.dev) plugin with two tools for running [OmO](https://github.com/code-yeongyu/oh-my-openagent) in herdr: a live agents board and automatic tab titles with agent icons, status glyphs, and MRU alt-tab.
+
+## Install
+
+```sh
+herdr plugin install rob-64/herdr-omo-toolbox
+```
+
+This replaces the older `herdr-omo-agents` plugin — uninstall it first if you had it:
+
+```sh
+herdr plugin uninstall herdr-omo-agents
+```
+
+It needs `bun` or `node` 18+ on `PATH`. Nothing is built or downloaded.
+
+Having a coding agent install it? Point it at [agents-install.md](agents-install.md): it covers the install, the OmO `/agents-pane` extension, and keybindings.
+
+## Agents board
+
+Shows every OmO subagent and DAG run in one live board: status, agent, task, model, elapsed time, and what each running agent is doing right now.
 
 ```
  OmO Agents  GLOBAL   Agents  DAG   filter:today                 ⠋1 ✔238 ✖1
@@ -12,21 +32,13 @@ A [herdr](https://herdr.dev) plugin that shows every [OmO](https://github.com/co
   ✔ plan-consultant  Gap-analyze TAS GitHub CI parity plan            7m55s
 ```
 
-## Install
-
-```sh
-herdr plugin install rob-64/herdr-omo-agents
-```
-
-It needs `bun` or `node` 18+ on `PATH`. Nothing is built or downloaded.
-
-## Open it
+### Open it
 
 | Action | What it does |
 | --- | --- |
-| `herdr-omo-agents.open` | Popup over the current pane |
-| `herdr-omo-agents.open-split` | Split to the right of the current pane |
-| `herdr-omo-agents.open-tab` | Its own tab |
+| `herdr-omo-toolbox.open` | Popup over the current pane |
+| `herdr-omo-toolbox.open-split` | Split to the right of the current pane |
+| `herdr-omo-toolbox.open-tab` | Its own tab |
 
 Bind one to a key in `~/.config/herdr/config.toml`:
 
@@ -34,11 +46,11 @@ Bind one to a key in `~/.config/herdr/config.toml`:
 [[keys.command]]
 key = "prefix+o"
 type = "plugin_action"
-command = "herdr-omo-agents.open"
+command = "herdr-omo-toolbox.open"
 description = "OmO agents board"
 ```
 
-Or run it from a shell: `herdr plugin action invoke herdr-omo-agents.open`.
+Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
 
 ### `/agents-pane` in OmO
 
@@ -57,10 +69,12 @@ Or run it from a shell: `herdr plugin action invoke herdr-omo-agents.open`.
 Install it, then start a new OmO session or run `/reload`:
 
 ```sh
-cp omo/agents-command.js ~/.omo/agent/extensions/herdr-omo-agents.js
+cp omo/agents-command.js ~/.omo/agent/extensions/herdr-omo-toolbox.js
 ```
 
-## Keys
+Remove the old `herdr-omo-agents.js` extension if you had it installed.
+
+### Keys
 
 | Key | Action |
 | --- | --- |
@@ -80,13 +94,13 @@ It opens in **global** scope, **Agents** view, filter **active**.
 
 The session in the herdr pane you last focused is highlighted.
 
-## What it shows
+### What it shows
 
 - **Agents view**: one block per OmO session, labelled with its herdr pane and title. Open OmO panes are listed even when they have no subagents, so you can see which ones are working or waiting for input. Each subagent shows its status, agent or category, task summary, model, elapsed time, and turns/tool calls. Running subagents get a live line with the current tool call and the latest thought. In global scope, each session lists at most 5 finished subagents; `s` shows the rest.
 - **DAG view**: each `mass ulw` / DAG run with a progress bar, then its nodes by stage with dependencies (`← build`), route, attempt, and elapsed time. Failed nodes show their error.
 - **Stale detection**: a subagent still marked running whose host process is gone is flagged `!`.
 
-## How it works
+### How it works
 
 The board only reads files; it never writes to OmO state.
 
@@ -97,7 +111,7 @@ The board only reads files; it never writes to OmO state.
 
 Set `OMO_AGENTS_DIR` to read a different OmO agent directory.
 
-## CLI
+### CLI
 
 `bin/omo-agents` also runs outside herdr:
 
@@ -105,6 +119,66 @@ Set `OMO_AGENTS_DIR` to read a different OmO agent directory.
 bin/omo-agents --once --scope global --view dag --filter all --width 140
 bin/omo-agents --json --scope session --session-pane w11:p1
 ```
+
+## Tab titles, icons, alt-tab
+
+Makes tabs usable with OmO agents:
+
+- **Automatic tab titles** from each agent's task title (not the live terminal title).
+- **Icons and status** in the tab bar, e.g. `󰧟 ◐ Fix merge conflicts PR 7`.
+- **Last tab** action — MRU alt-tab across workspaces.
+
+Requires a **Nerd Font** (e.g. Hack Nerd Font Mono) for agent icons.
+
+On startup Herdr runs `omo-tabs ensure`, which starts a background watcher. You can also use the **Start tab titles** / **Stop tab titles** plugin actions (`herdr-omo-toolbox.tabs-start`, `herdr-omo-toolbox.tabs-stop`).
+
+### Keybinding (last tab)
+
+Add to your Herdr config:
+
+```toml
+[[keys.command]]
+key = "prefix+tab"
+type = "plugin_action"
+command = "herdr-omo-toolbox.last-tab"
+description = "last tab"
+```
+
+Then reload:
+
+```bash
+herdr server reload-config
+```
+
+Pressing the binding jumps to the previously focused tab; repeated presses toggle between the last two tabs (even across workspaces).
+
+### Config
+
+Optional file: `HERDR_PLUGIN_CONFIG_DIR/config.json` (typically under your Herdr plugin config tree):
+
+```json
+{
+  "icons": { "omo": "󰧟" },
+  "status": true,
+  "max_title": 32
+}
+```
+
+- `icons` — per-agent Nerd Font glyphs; merge over defaults. Set `"icons": false` to disable icons.
+- `status` — show status glyphs (`◐`, `◉`, …). Set `false` to hide them.
+- `max_title` — max characters for the task title (truncated with `…`).
+
+Tab watcher state (MRU, owned labels, watcher PID) lives under `$HERDR_PLUGIN_STATE_DIR/tabs/`.
+
+### What gets renamed
+
+The watcher only claims tabs that look unnamed (numeric labels like `1`), stale `OmO - …` terminal titles, or tabs it already owns. Custom tab names you set yourself are left alone. If you rename a tab the plugin had named, that tab is released and never auto-renamed again.
+
+When the watcher stops, it strips icon/status prefixes from tabs it owned and restores plain titles.
+
+### herdr-bar
+
+This plugin's description includes **Automatic tab titles**, so **herdr-bar** detects it and stops its own tab renaming — the two plugins do not fight.
 
 ## License
 
