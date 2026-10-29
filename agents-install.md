@@ -18,21 +18,9 @@ If `herdr` is missing or older than 0.9.0, stop and tell the user. If neither
 The tab icons need a Nerd Font in the user's terminal (for example Hack Nerd
 Font Mono). If you can't tell which font they use, mention it in your final
 report instead of guessing. Without one, icons show as boxes; the user can
-turn them off (step 6).
+turn them off (step 5).
 
-## 2. Remove the old plugin
-
-`herdr-omo-toolbox` replaces `herdr-omo-agents`. Uninstall it if present:
-
-```sh
-herdr plugin list --json --plugin herdr-omo-agents >/dev/null 2>&1 \
-  && herdr plugin uninstall herdr-omo-agents
-```
-
-If the user has a local link of this repo instead (`herdr plugin list` shows
-`herdr-omo-toolbox` with `source.kind` `local`), ask before replacing it.
-
-## 3. Install
+## 2. Install
 
 ```sh
 herdr plugin install rob-64/herdr-omo-toolbox --yes
@@ -45,9 +33,9 @@ herdr plugin list --json --plugin herdr-omo-toolbox
 ```
 
 The result must show `"plugin_id": "herdr-omo-toolbox"` and `"enabled": true`.
-Note the `plugin_root` value; step 5 uses it.
+Note the `plugin_root` value; step 4 uses it.
 
-## 4. Start the tab watcher
+## 3. Start the tab watcher
 
 The watcher starts by itself on the next herdr server start or when herdr next
 detects an agent. To start it now:
@@ -69,7 +57,7 @@ Tabs the user named themselves are left alone; only unnamed tabs (`1`, `2`,
 `HERDR_PLUGIN_STATE_DIR` (usually
 `~/.local/state/herdr/plugins/herdr-omo-toolbox`).
 
-## 5. Install the OmO extension (`/agents-pane`)
+## 4. Install the OmO extension (`/agents-pane`)
 
 The extension adds `/agents-pane [mode]` to OmO to open the agents board. OmO
 loads extensions from `~/.omo/agent/extensions/`.
@@ -81,7 +69,7 @@ cp "$root/omo/agents-command.js" ~/.omo/agent/extensions/herdr-omo-toolbox.js
 rm -f ~/.omo/agent/extensions/herdr-omo-agents.js   # old extension; opens a plugin that no longer exists
 ```
 
-If `jq` is not installed, copy the `plugin_root` path from step 3 by hand, or
+If `jq` is not installed, copy the `plugin_root` path from step 2 by hand, or
 download the file instead:
 
 ```sh
@@ -95,7 +83,7 @@ The extension is picked up by new OmO sessions. Tell the user to run `/reload`
 in OmO sessions that are already open. The extension is a copy, so after a
 plugin update, repeat this step to refresh it.
 
-## 6. Keybindings and config (ask the user first)
+## 5. Keybindings and config (ask the user first)
 
 Do not edit the user's herdr config without asking. Offer these bindings for
 `~/.config/herdr/config.toml`:
@@ -133,7 +121,7 @@ Optional tab-title settings go in `config.json` in the plugin config dir
 `"icons": false` turns icons off (use this when there's no Nerd Font). Changes
 apply within a few seconds.
 
-## 7. Report
+## 6. Report
 
 Tell the user:
 
