@@ -273,6 +273,8 @@ function createReporter(pi, config, globalState, token, exec) {
 						clearRefreshMeta();
 						return;
 					}
+					// Resend state too, so a release from another reporter (e.g. old omo-herdr) heals.
+					queue.lastAgent = null;
 					publish();
 				}, 15000);
 				refreshMeta.unref();
