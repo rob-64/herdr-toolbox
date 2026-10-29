@@ -1,6 +1,6 @@
 import { createConnection } from 'node:net';
 
-const REQUEST_ID = 'omo-tabs';
+const REQUEST_ID = 'tabs';
 
 function socketPath() {
   const path = process.env.HERDR_SOCKET_PATH;

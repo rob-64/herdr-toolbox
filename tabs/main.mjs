@@ -116,7 +116,7 @@ async function applyRenames(renames, ownedBefore, tabsState) {
 async function watchDaemon() {
   const socket = process.env.HERDR_SOCKET_PATH;
   if (!socket) {
-    console.error('omo-tabs watch: HERDR_SOCKET_PATH not set');
+    console.error('tabs watch: HERDR_SOCKET_PATH not set');
     process.exit(1);
   }
 
@@ -291,7 +291,7 @@ async function lastTab() {
   try {
     snap = await snapshot();
   } catch (error) {
-    console.error(`omo-tabs last-tab: ${error.message}`);
+    console.error(`tabs last-tab: ${error.message}`);
     process.exit(1);
   }
 
@@ -312,13 +312,13 @@ async function lastTab() {
     try {
       await request('workspace.focus', { workspace_id: targetTab.workspace_id });
     } catch (error) {
-      console.error(`omo-tabs workspace.focus: ${error.message}`);
+      console.error(`tabs workspace.focus: ${error.message}`);
     }
   }
   try {
     await request('tab.focus', { tab_id: target });
   } catch (error) {
-    console.error(`omo-tabs tab.focus: ${error.message}`);
+    console.error(`tabs tab.focus: ${error.message}`);
     process.exit(1);
   }
 
@@ -333,25 +333,25 @@ async function lastTab() {
 async function stopWatcher() {
   const info = loadWatcherPid();
   if (!info?.pid || !isProcessAlive(info.pid)) {
-    console.log('omo-tabs: watcher not running');
+    console.log('tabs: watcher not running');
     removeWatcherPid();
     return;
   }
   try {
     process.kill(info.pid, 'SIGTERM');
   } catch (error) {
-    console.log(`omo-tabs: could not signal watcher: ${error.message}`);
+    console.log(`tabs: could not signal watcher: ${error.message}`);
     return;
   }
   const deadline = Date.now() + 3000;
   while (Date.now() < deadline) {
     if (!isProcessAlive(info.pid)) {
-      console.log(`omo-tabs: watcher ${info.pid} stopped`);
+      console.log(`tabs: watcher ${info.pid} stopped`);
       return;
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  console.log(`omo-tabs: watcher ${info.pid} still running after 3s`);
+  console.log(`tabs: watcher ${info.pid} still running after 3s`);
 }
 
 async function main() {
@@ -370,7 +370,7 @@ async function main() {
       await stopWatcher();
       break;
     default:
-      console.error('omo-tabs: usage: ensure | watch | last-tab | stop');
+      console.error('tabs: usage: ensure | watch | last-tab | stop');
       process.exit(2);
   }
 }

@@ -13,7 +13,7 @@ if command -v node >/dev/null 2>&1; then
     exec node "$main" "$@"
   fi
 fi
-echo "omo-tabs: needs bun or node >= 18 on PATH" >&2
+echo "tabs: needs bun or node >= 18 on PATH" >&2
 printf 'Press Enter to close.' >&2
 read -r _ || true
 exit 1
