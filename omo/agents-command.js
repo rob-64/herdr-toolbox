@@ -12,7 +12,7 @@ const MODES = [
 ];
 
 const HELP = [
-	"/agents-pane [mode]  open the OmO Agents board",
+	"/agents-board [mode]  open the OmO Agents board",
 	...MODES.map((mode) => `  ${mode.name.padEnd(10)} ${mode.help}`),
 	"  help       show this help",
 ].join("\n");
@@ -26,8 +26,8 @@ function herdr(args) {
 }
 
 export default function (pi) {
-	pi.registerCommand("agents-pane", {
-		description: `Open the OmO Agents board: /agents-pane [${MODES.map((mode) => mode.name).join("|")}|help]`,
+	pi.registerCommand("agents-board", {
+		description: `Open the OmO Agents board: /agents-board [${MODES.map((mode) => mode.name).join("|")}|help]`,
 		getArgumentCompletions: (prefix) => {
 			const items = [...MODES, { name: "help", help: "show modes" }]
 				.filter((mode) => mode.name.startsWith(prefix.trim()))
@@ -42,16 +42,16 @@ export default function (pi) {
 			}
 			const mode = MODES.find((entry) => entry.name === name);
 			if (!mode) {
-				ctx.ui.notify(`/agents-pane: unknown mode "${name}"\n${HELP}`, "error");
+				ctx.ui.notify(`/agents-board: unknown mode "${name}"\n${HELP}`, "error");
 				return;
 			}
 			const pane = process.env.HERDR_PANE_ID;
 			if (!pane) {
-				ctx.ui.notify("/agents-pane only works inside a herdr pane", "error");
+				ctx.ui.notify("/agents-board only works inside a herdr pane", "error");
 				return;
 			}
 			const { error, output } = await herdr(["plugin", "pane", "open", "--plugin", PLUGIN, ...mode.args(pane)]);
-			if (error) ctx.ui.notify(`/agents-pane: ${output || error.message}`, "error");
+			if (error) ctx.ui.notify(`/agents-board: ${output || error.message}`, "error");
 		},
 	});
 }

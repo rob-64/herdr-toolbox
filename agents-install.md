@@ -57,9 +57,9 @@ Tabs the user named themselves are left alone; only unnamed tabs (`1`, `2`,
 `HERDR_PLUGIN_STATE_DIR` (usually
 `~/.local/state/herdr/plugins/herdr-omo-toolbox`).
 
-## 4. Install the OmO extension (`/agents-pane`)
+## 4. Install the OmO extension (`/agents-board`)
 
-The extension adds `/agents-pane [mode]` to OmO to open the agents board. OmO
+The extension adds `/agents-board [mode]` to OmO to open the agents board. OmO
 loads extensions from `~/.omo/agent/extensions/`.
 
 ```sh

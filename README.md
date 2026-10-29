@@ -16,7 +16,7 @@ herdr plugin uninstall herdr-omo-agents
 
 It needs `bun` or `node` 18+ on `PATH`. Nothing is built or downloaded.
 
-Having a coding agent install it? Point it at [agents-install.md](agents-install.md): it covers the install, the OmO `/agents-pane` extension, and keybindings.
+Having a coding agent install it? Point it at [agents-install.md](agents-install.md): it covers the install, the OmO `/agents-board` extension, and keybindings.
 
 ## Agents board
 
@@ -52,9 +52,9 @@ description = "OmO agents board"
 
 Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
 
-### `/agents-pane` in OmO
+### `/agents-board` in OmO
 
-`omo/agents-command.js` is an OmO extension that adds `/agents-pane [mode]` with tab completion for the mode:
+`omo/agents-command.js` is an OmO extension that adds `/agents-board [mode]` with tab completion for the mode:
 
 | Mode | Opens |
 | --- | --- |
