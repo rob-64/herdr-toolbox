@@ -3,8 +3,9 @@ import { execFile } from "node:child_process";
 const PLUGIN = "herdr-omo-agents";
 
 const PLACEMENTS = {
-	popup: () => ["--entrypoint", "board", "--focus"],
 	split: (pane) => ["--entrypoint", "side", "--placement", "split", "--direction", "right", "--target-pane", pane, "--no-focus"],
+	overlay: () => ["--entrypoint", "side", "--placement", "overlay", "--focus"],
+	popup: () => ["--entrypoint", "board", "--focus"],
 	tab: () => ["--entrypoint", "side", "--placement", "tab", "--focus"],
 };
 
@@ -18,12 +19,12 @@ function herdr(args) {
 
 export default function (pi) {
 	pi.registerCommand("agents-pane", {
-		description: "Open the OmO Agents board (herdr-omo-agents): /agents-pane [popup|split|tab]",
+		description: "Open the OmO Agents board (herdr-omo-agents): /agents-pane [split|overlay|popup|tab]",
 		handler: async (args, ctx) => {
-			const placement = String(args ?? "").trim() || "popup";
+			const placement = String(args ?? "").trim() || "split";
 			const build = PLACEMENTS[placement];
 			if (!build) {
-				ctx.ui.notify(`/agents-pane: unknown placement "${placement}" (use popup, split, or tab)`, "error");
+				ctx.ui.notify(`/agents-pane: unknown placement "${placement}" (use split, overlay, popup, or tab)`, "error");
 				return;
 			}
 			const pane = process.env.HERDR_PANE_ID;

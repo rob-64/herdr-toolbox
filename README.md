@@ -42,7 +42,7 @@ Or run it from a shell: `herdr plugin action invoke herdr-omo-agents.open`.
 
 ### `/agents-pane` in OmO
 
-`omo/agents-command.js` is an OmO extension that adds `/agents-pane [popup|split|tab]` (default `popup`). Install it, then start a new OmO session or run `/reload`:
+`omo/agents-command.js` is an OmO extension that adds `/agents-pane [split|overlay|popup|tab]` (default `split`: opens to the right without taking focus; `overlay` zooms over the current pane until you press `q`). Install it, then start a new OmO session or run `/reload`:
 
 ```sh
 cp omo/agents-command.js ~/.omo/agent/extensions/herdr-omo-agents.js
