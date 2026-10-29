@@ -1,0 +1,48 @@
+id = "herdr-omo-agents"
+name = "OmO Agents"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Live board of every OmO subagent and DAG run: status, task, model, progress. Toggle global / current session."
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["sh", "scripts/check-runtime.sh"]
+
+# Herdr resolves a relative argv[0] against the pane cwd, so the pane command
+# resolves the launcher from the injected plugin root instead.
+[[panes]]
+id = "board"
+title = "OmO Agents"
+description = "Live board of OmO subagents and DAG runs"
+placement = "popup"
+width = "92%"
+height = "88%"
+command = ["/bin/sh", "-c", "exec \"${HERDR_PLUGIN_ROOT:?not launched by herdr}/bin/omo-agents\""]
+
+[[panes]]
+id = "side"
+title = "OmO Agents"
+description = "Live board of OmO subagents and DAG runs"
+placement = "split"
+command = ["/bin/sh", "-c", "exec \"${HERDR_PLUGIN_ROOT:?not launched by herdr}/bin/omo-agents\""]
+
+[[actions]]
+id = "open"
+title = "OmO Agents"
+description = "Open the OmO agents board as a popup"
+contexts = ["global", "workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-agents", "--entrypoint", "board", "--focus"]
+
+[[actions]]
+id = "open-split"
+title = "OmO Agents (split)"
+description = "Open the OmO agents board in a split to the right"
+contexts = ["global", "workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-agents", "--entrypoint", "side", "--placement", "split", "--direction", "right", "--no-focus"]
+
+[[actions]]
+id = "open-tab"
+title = "OmO Agents (tab)"
+description = "Open the OmO agents board in its own tab"
+contexts = ["global", "workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-agents", "--entrypoint", "side", "--placement", "tab", "--focus"]
