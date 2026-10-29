@@ -17,14 +17,14 @@ description = "Live board of OmO subagents and DAG runs"
 placement = "popup"
 width = "92%"
 height = "88%"
-command = ["/bin/sh", "-c", "exec \"${HERDR_PLUGIN_ROOT:?not launched by herdr}/bin/omo-agents\""]
+command = ["/bin/sh", "-c", "exec \"${HERDR_PLUGIN_ROOT:?not launched by herdr}/bin/agents-board\""]
 
 [[panes]]
 id = "side"
 title = "OmO Agents"
 description = "Live board of OmO subagents and DAG runs"
 placement = "split"
-command = ["/bin/sh", "-c", "exec \"${HERDR_PLUGIN_ROOT:?not launched by herdr}/bin/omo-agents\""]
+command = ["/bin/sh", "-c", "exec \"${HERDR_PLUGIN_ROOT:?not launched by herdr}/bin/agents-board\""]
 
 [[actions]]
 id = "open"
@@ -48,29 +48,29 @@ contexts = ["global", "workspace"]
 command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "side", "--placement", "tab", "--focus"]
 
 [[startup]]
-command = ["bin/omo-tabs", "ensure"]
+command = ["bin/tabs", "ensure"]
 
 [[events]]
 on = "pane.agent_detected"
-command = ["bin/omo-tabs", "ensure"]
+command = ["bin/tabs", "ensure"]
 
 [[actions]]
 id = "last-tab"
 title = "Last tab"
 description = "Jump back to the previously focused tab (alt-tab)"
 contexts = ["global"]
-command = ["bin/omo-tabs", "last-tab"]
+command = ["bin/tabs", "last-tab"]
 
 [[actions]]
 id = "tabs-start"
 title = "Start tab titles"
 description = "Start automatic tab titles"
 contexts = ["global"]
-command = ["bin/omo-tabs", "ensure"]
+command = ["bin/tabs", "ensure"]
 
 [[actions]]
 id = "tabs-stop"
 title = "Stop tab titles"
 description = "Stop automatic tab titles and strip icons/status from tabs it named"
 contexts = ["global"]
-command = ["bin/omo-tabs", "stop"]
+command = ["bin/tabs", "stop"]

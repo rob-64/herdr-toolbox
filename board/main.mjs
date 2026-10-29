@@ -34,7 +34,7 @@ function parseArgs(argv) {
   return options;
 }
 
-const USAGE = `omo-agents: live board of OmO subagents and DAG runs
+const USAGE = `agents-board: live board of OmO subagents and DAG runs
 
   --view agents|dag         --scope global|session     --filter active|today|all
   --session <id>            --session-pane <herdr pane id>
@@ -312,7 +312,7 @@ async function interactive(board) {
 async function main() {
   let options;
   try { options = parseArgs(process.argv.slice(2)); }
-  catch (error) { console.error(`omo-agents: ${error.message}\n\n${USAGE}`); process.exit(2); }
+  catch (error) { console.error(`agents-board: ${error.message}\n\n${USAGE}`); process.exit(2); }
   if (options.help) { console.log(USAGE); return; }
   const board = new Board(options);
   if (process.env.HERDR_PLUGIN_STATE_DIR) {

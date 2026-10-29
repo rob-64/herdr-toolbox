@@ -54,7 +54,7 @@ Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
 
 ### `/agents-board` in OmO
 
-`omo/agents-command.js` is an OmO extension that adds `/agents-board [mode]` with tab completion for the mode:
+`board/omo-extension.js` is an OmO extension that adds `/agents-board [mode]` with tab completion for the mode:
 
 | Mode | Opens |
 | --- | --- |
@@ -69,7 +69,7 @@ Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
 Install it, then start a new OmO session or run `/reload`:
 
 ```sh
-cp omo/agents-command.js ~/.omo/agent/extensions/herdr-omo-toolbox.js
+cp board/omo-extension.js ~/.omo/agent/extensions/herdr-omo-toolbox.js
 ```
 
 Remove the old `herdr-omo-agents.js` extension if you had it installed.
@@ -113,11 +113,11 @@ Set `OMO_AGENTS_DIR` to read a different OmO agent directory.
 
 ### CLI
 
-`bin/omo-agents` also runs outside herdr:
+`bin/agents-board` also runs outside herdr:
 
 ```sh
-bin/omo-agents --once --scope global --view dag --filter all --width 140
-bin/omo-agents --json --scope session --session-pane w11:p1
+bin/agents-board --once --scope global --view dag --filter all --width 140
+bin/agents-board --json --scope session --session-pane w11:p1
 ```
 
 ## Tab titles, icons, alt-tab
@@ -130,7 +130,7 @@ Makes tabs usable with OmO agents:
 
 Requires a **Nerd Font** (e.g. Hack Nerd Font Mono) for agent icons.
 
-On startup Herdr runs `omo-tabs ensure`, which starts a background watcher. You can also use the **Start tab titles** / **Stop tab titles** plugin actions (`herdr-omo-toolbox.tabs-start`, `herdr-omo-toolbox.tabs-stop`).
+On startup Herdr runs `tabs ensure`, which starts a background watcher. You can also use the **Start tab titles** / **Stop tab titles** plugin actions (`herdr-omo-toolbox.tabs-start`, `herdr-omo-toolbox.tabs-stop`).
 
 ### Keybinding (last tab)
 
@@ -179,6 +179,14 @@ When the watcher stops, it strips icon/status prefixes from tabs it owned and re
 ### herdr-bar
 
 This plugin's description includes **Automatic tab titles**, so **herdr-bar** detects it and stops its own tab renaming — the two plugins do not fight.
+
+## Layout
+
+- `board/` — live agents board (`main.mjs`, data/render, OmO extension)
+- `tabs/` — automatic tab titles, icons, MRU state, and tests
+- `bin/agents-board` — launcher for the board
+- `bin/tabs` — launcher for the tab watcher and actions
+- `scripts/check-runtime.sh` — plugin build check (bun or node 18+)
 
 ## License
 

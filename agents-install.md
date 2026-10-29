@@ -65,7 +65,7 @@ loads extensions from `~/.omo/agent/extensions/`.
 ```sh
 root=$(herdr plugin list --json --plugin herdr-omo-toolbox | jq -r '.result.plugins[0].plugin_root')
 mkdir -p ~/.omo/agent/extensions
-cp "$root/omo/agents-command.js" ~/.omo/agent/extensions/herdr-omo-toolbox.js
+cp "$root/board/omo-extension.js" ~/.omo/agent/extensions/herdr-omo-toolbox.js
 rm -f ~/.omo/agent/extensions/herdr-omo-agents.js   # old extension; opens a plugin that no longer exists
 ```
 
@@ -73,7 +73,7 @@ If `jq` is not installed, copy the `plugin_root` path from step 2 by hand, or
 download the file instead:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/rob-64/herdr-omo-toolbox/main/omo/agents-command.js \
+curl -fsSL https://raw.githubusercontent.com/rob-64/herdr-omo-toolbox/main/board/omo-extension.js \
   -o ~/.omo/agent/extensions/herdr-omo-toolbox.js
 ```
 

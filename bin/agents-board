@@ -2,7 +2,7 @@
 # Launch the board with bun when available, else node >= 18.
 set -e
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-main="$root/src/main.mjs"
+main="$root/board/main.mjs"
 
 if command -v bun >/dev/null 2>&1; then
   exec bun "$main" "$@"
@@ -13,7 +13,7 @@ if command -v node >/dev/null 2>&1; then
     exec node "$main" "$@"
   fi
 fi
-echo "omo-agents: needs bun or node >= 18 on PATH" >&2
+echo "agents-board: needs bun or node >= 18 on PATH" >&2
 printf 'Press Enter to close.' >&2
 read -r _ || true
 exit 1

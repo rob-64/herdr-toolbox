@@ -6,7 +6,7 @@ import {
   iconFor,
   plan,
   stripPrefix,
-} from '../src/tabs/labels.mjs';
+} from './labels.mjs';
 
 const OMO = DEFAULT_ICONS.omo;
 
