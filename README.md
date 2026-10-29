@@ -42,7 +42,19 @@ Or run it from a shell: `herdr plugin action invoke herdr-omo-agents.open`.
 
 ### `/agents-pane` in OmO
 
-`omo/agents-command.js` is an OmO extension that adds `/agents-pane [split|overlay|popup|tab]` (default `split`: opens to the right without taking focus; `overlay` zooms over the current pane until you press `q`). Install it, then start a new OmO session or run `/reload`:
+`omo/agents-command.js` is an OmO extension that adds `/agents-pane [mode]` with tab completion for the mode:
+
+| Mode | Opens |
+| --- | --- |
+| `split` (default) | Split to the right, focus stays in OmO |
+| `split-down` | Split below, focus stays in OmO |
+| `overlay` | Zoomed over the current pane until you press `q` |
+| `popup` | Floating window over everything |
+| `zoomed` | New pane, zoomed to fill the tab |
+| `tab` | Its own tab |
+| `help` | Lists the modes |
+
+Install it, then start a new OmO session or run `/reload`:
 
 ```sh
 cp omo/agents-command.js ~/.omo/agent/extensions/herdr-omo-agents.js
