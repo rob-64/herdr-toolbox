@@ -1,12 +1,20 @@
 /** @typedef {{ owned: Record<string, string>, released: string[] }} TabsState */
 
 const STATUS_GLYPH = {
-  blocked: '◉',
-  working: '◐',
-  done: '●',
-  idle: '✓',
-  unknown: '○',
+  blocked: '\u{F0EC2}', // md-record_circle
+  working: '\u{F1396}', // md-circle_half_full
+  done: '\u{F0765}', // md-circle
+  idle: '\u{F012C}', // md-check
+  unknown: '\u{F0766}', // md-circle_outline
 };
+
+const LEGACY_GLYPHS = new Set([
+  '◉',
+  '◐',
+  '●',
+  '✓',
+  '○',
+]); // previous Unicode status glyphs
 
 const URGENCY = ['blocked', 'working', 'done', 'idle', 'unknown'];
 
@@ -22,9 +30,9 @@ const DEFAULT_ICONS = {
   default: '\u{F06A9}', // md-robot
 };
 
-const LEGACY_ICONS = new Set([String.fromCodePoint(0xF0000 + 0x9df)]);
+const LEGACY_ICONS = new Set(['\u{F09DF}']); // md-circle_small, old omo icon
 
-const ALL_GLYPHS = new Set(Object.values(STATUS_GLYPH));
+const ALL_GLYPHS = new Set([...Object.values(STATUS_GLYPH), ...LEGACY_GLYPHS]);
 const ALL_ICONS = new Set(Object.values(DEFAULT_ICONS));
 
 /**

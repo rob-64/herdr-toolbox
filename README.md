@@ -25,7 +25,7 @@ Shows every OmO subagent and DAG run in one live board: status, agent, task, mod
 ```
  OmO Agents  GLOBAL   Agents  DAG   filter:today                 ⠋1 ✔238 ✖1
 ──────────────────────────────────────────────────────────────────────────────
-▍w18:p1 · Update uas-normalize to 7.5.0  ● idle   1 running · 3 done
+▍w18:p1 · Update uas-normalize to 7.5.0  󰄬 idle   1 running · 3 done
   ⠙ plan-reviewer    High-accuracy review of tas-github-ci-parity…    9m04s
      └ [grep …/workflows/build-and-publish.yml] I'm confirming the nexus-ur…
   ✔ plan-reviewer    High-accuracy review of tas-github-ci-parity…   10m58s
@@ -127,10 +127,10 @@ bin/agents-board --json --scope session --session-pane w11:p1
 Makes tabs usable with OmO agents:
 
 - **Automatic tab titles** from each agent's task title (not the live terminal title). Before the agent has a task title, the tab shows the agent's folder name (last segment of its working directory).
-- **Icons and status** in the tab bar, e.g. `󰏉 ◐ Fix merge conflicts PR 7`.
+- **Icons and status** in the tab bar, e.g. `󰏉 󱎖 Fix merge conflicts PR 7`.
 - **Last tab** action — MRU alt-tab across workspaces.
 
-Requires a **Nerd Font** (e.g. Hack Nerd Font Mono) for agent icons.
+Requires a **Nerd Font** (e.g. Hack Nerd Font Mono) for agent and status glyphs (Material Design icons in the Nerd Font PUA, vertically aligned with the agent icon).
 
 On startup Herdr runs `tabs ensure`, which starts a background watcher. You can also use the **Start tab titles** / **Stop tab titles** plugin actions (`herdr-omo-toolbox.tabs-start`, `herdr-omo-toolbox.tabs-stop`).
 
@@ -167,7 +167,7 @@ Optional file: `HERDR_PLUGIN_CONFIG_DIR/config.json` (typically under your Herdr
 ```
 
 - `icons` — per-agent Nerd Font glyphs; merge over defaults. Set `"icons": false` to disable icons.
-- `status` — show status glyphs (`◐`, `◉`, …). Set `false` to hide them.
+- `status` — show Nerd Font status glyphs (e.g. 󱎖 working, 󰻂 blocked, 󰝥 done, 󰄬 idle, 󰝦 unknown). Set `false` to hide them.
 - `max_title` — max characters for the task title (truncated with `…`).
 
 Tab watcher state (MRU, owned labels, watcher PID) lives under `$HERDR_PLUGIN_STATE_DIR/tabs/`.

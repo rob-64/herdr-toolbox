@@ -6,6 +6,7 @@ import {
   glyphFor,
   iconFor,
   plan,
+  STATUS_GLYPH,
   stripPrefix,
 } from './labels.mjs';
 
@@ -46,12 +47,12 @@ describe('plan', () => {
     const snapshot = snap([tab('w0:t1', '1', 1)], [agent('w0:p1', 'w0:t1')]);
     const { renames, state } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
     assert.equal(renames.length, 1);
-    assert.equal(renames[0].label, `${OMO} ◐ Fix login`);
+    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.working} Fix login`);
     assert.equal(state.owned['w0:t1'], renames[0].label);
   });
 
   it('does not rename when label already matches owned', () => {
-    const label = `${OMO} ◐ Fix login`;
+    const label = `${OMO} ${STATUS_GLYPH.working} Fix login`;
     const snapshot = snap([tab('w0:t1', label)], [agent('w0:p1', 'w0:t1')]);
     const { renames } = plan(
       snapshot,
@@ -62,7 +63,7 @@ describe('plan', () => {
   });
 
   it('updates glyph on status change', () => {
-    const old = `${OMO} ◐ Fix login`;
+    const old = `${OMO} ${STATUS_GLYPH.working} Fix login`;
     const snapshot = snap(
       [tab('w0:t1', old)],
       [agent('w0:p1', 'w0:t1', { agent_status: 'blocked' })],
@@ -72,11 +73,11 @@ describe('plan', () => {
       { owned: { 'w0:t1': old }, released: [] },
       defaultConfig,
     );
-    assert.equal(renames[0].label, `${OMO} ◉ Fix login`);
+    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.blocked} Fix login`);
   });
 
   it('releases tab when user renames owned tab', () => {
-    const owned = `${OMO} ◐ Fix login`;
+    const owned = `${OMO} ${STATUS_GLYPH.working} Fix login`;
     const snapshot = snap([tab('w0:t1', 'My custom name')], [agent('w0:p1', 'w0:t1')]);
     const { renames, state } = plan(
       snapshot,
@@ -101,7 +102,7 @@ describe('plan', () => {
   });
 
   it('keeps ownership of bare label when agent leaves', () => {
-    const label = `${OMO} ◐ Fix login`;
+    const label = `${OMO} ${STATUS_GLYPH.working} Fix login`;
     const snapshot = snap([tab('w0:t1', label)]);
     const { renames, state } = plan(
       snapshot,
@@ -113,7 +114,7 @@ describe('plan', () => {
   });
 
   it('reclaims tab when agent returns after bare rename', () => {
-    const label = `${OMO} ◐ Fix login`;
+    const label = `${OMO} ${STATUS_GLYPH.working} Fix login`;
     const snapshot = snap([tab('w0:t1', label)]);
     const first = plan(
       snapshot,
@@ -126,8 +127,8 @@ describe('plan', () => {
     const restored = snap([tab('w0:t1', 'Fix login')], [agent('w0:p1', 'w0:t1')]);
     const second = plan(restored, first.state, defaultConfig);
     assert.equal(second.renames.length, 1);
-    assert.equal(second.renames[0].label, `${OMO} ◐ Fix login`);
-    assert.equal(second.state.owned['w0:t1'], `${OMO} ◐ Fix login`);
+    assert.equal(second.renames[0].label, `${OMO} ${STATUS_GLYPH.working} Fix login`);
+    assert.equal(second.state.owned['w0:t1'], `${OMO} ${STATUS_GLYPH.working} Fix login`);
   });
 
   it('does not touch unowned tab without agents', () => {
@@ -146,7 +147,7 @@ describe('plan', () => {
     );
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
     assert.match(renames[0].label, /Blocked task/);
-    assert.match(renames[0].label, /◉/);
+    assert.match(renames[0].label, new RegExp(STATUS_GLYPH.blocked));
   });
 
   it('uses tab number when title missing and agent has no cwd', () => {
@@ -156,7 +157,7 @@ describe('plan', () => {
   });
 
   it('keeps previous base when owned and title missing and agent has no cwd', () => {
-    const label = `${OMO} ◐ Keep this base`;
+    const label = `${OMO} ${STATUS_GLYPH.working} Keep this base`;
     const snapshot = snap(
       [tab('w0:t1', label)],
       [agent('w0:p1', 'w0:t1', { title: null })],
@@ -181,7 +182,7 @@ describe('plan', () => {
       ],
     );
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
-    assert.equal(renames[0].label, `${OMO} ◐ scratch`);
+    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.working} scratch`);
   });
 
   it('prefers foreground_cwd over cwd for folder name', () => {
@@ -228,7 +229,7 @@ describe('plan', () => {
       ...defaultConfig,
       icons: false,
     });
-    assert.equal(noIcons.renames[0].label, '◐ Fix login');
+    assert.equal(noIcons.renames[0].label, `${STATUS_GLYPH.working} Fix login`);
 
     const noStatus = plan(snapshot, { owned: {}, released: [] }, {
       ...defaultConfig,
@@ -274,7 +275,7 @@ describe('plan', () => {
     );
     const { renames, state } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
     assert.equal(renames.length, 1);
-    assert.equal(renames[0].label, `${OMO} ◐ New task`);
+    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.working} New task`);
     assert.equal(state.owned['w0:t1'], renames[0].label);
   });
 
@@ -299,7 +300,7 @@ describe('plan', () => {
   });
 
   it('migrates owned tab from legacy omo icon to md-omega', () => {
-    const legacyOmo = String.fromCodePoint(0xF0000 + 0x9df);
+    const legacyOmo = '\u{F09DF}';
     const ownedLabel = `${legacyOmo} ✓ Fix login`;
     const snapshot = snap(
       [tab('w0:t1', ownedLabel)],
@@ -311,7 +312,22 @@ describe('plan', () => {
       defaultConfig,
     );
     assert.equal(renames.length, 1);
-    assert.equal(renames[0].label, `${OMO} ✓ Fix login`);
+    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.idle} Fix login`);
+  });
+
+  it('migrates owned tab from legacy status glyph to md glyphs', () => {
+    const ownedLabel = `${OMO} ◐ Fix login`;
+    const snapshot = snap(
+      [tab('w0:t1', ownedLabel)],
+      [agent('w0:p1', 'w0:t1', { agent_status: 'idle' })],
+    );
+    const { renames } = plan(
+      snapshot,
+      { owned: { 'w0:t1': ownedLabel }, released: [] },
+      defaultConfig,
+    );
+    assert.equal(renames.length, 1);
+    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.idle} Fix login`);
   });
 });
 
@@ -331,12 +347,22 @@ describe('folderName', () => {
 
 describe('helpers', () => {
   it('glyphFor maps statuses', () => {
-    assert.equal(glyphFor('working'), '◐');
-    assert.equal(glyphFor('nope'), '○');
+    assert.equal(glyphFor('working'), STATUS_GLYPH.working);
+    assert.equal(glyphFor('nope'), STATUS_GLYPH.unknown);
   });
 
   it('stripPrefix removes icon and glyph', () => {
+    const label = `${OMO} ${STATUS_GLYPH.working} Fix login`;
+    assert.equal(stripPrefix(label), 'Fix login');
+  });
+
+  it('stripPrefix removes legacy status glyph prefix', () => {
     const label = `${OMO} ◐ Fix login`;
+    assert.equal(stripPrefix(label), 'Fix login');
+  });
+
+  it('stripPrefix removes new status glyph without icon', () => {
+    const label = `${STATUS_GLYPH.blocked} Fix login`;
     assert.equal(stripPrefix(label), 'Fix login');
   });
 
