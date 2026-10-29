@@ -54,4 +54,38 @@ export default function (pi) {
 			if (error) ctx.ui.notify(`/agents-board: ${output || error.message}`, "error");
 		},
 	});
+
+	pi.registerCommand("rename-tab", {
+		description: "Rename the herdr tab this OmO session is in: /rename-tab <name>",
+		handler: async (args, ctx) => {
+			const name = String(args ?? "").trim();
+			if (!name || ["help", "-h", "--help", "?"].includes(name)) {
+				ctx.ui.notify("/rename-tab <name>  rename the herdr tab this OmO session is in", "info");
+				return;
+			}
+			const pane = process.env.HERDR_PANE_ID;
+			if (!pane) {
+				ctx.ui.notify("/rename-tab only works inside a herdr pane", "error");
+				return;
+			}
+			let tabId;
+			const { error, output } = await herdr(["pane", "get", pane]);
+			if (!error) {
+				try {
+					tabId = JSON.parse(output)?.result?.pane?.tab_id;
+				} catch {
+					// pane may have moved tabs
+				}
+			}
+			if (!tabId) tabId = process.env.HERDR_TAB_ID;
+			if (!tabId) {
+				ctx.ui.notify("/rename-tab: could not find this pane's tab", "error");
+				return;
+			}
+			// User-set names are treated as the user's; the tab watcher stops auto-renaming that tab.
+			const result = await herdr(["tab", "rename", tabId, name]);
+			if (result.error) ctx.ui.notify(`/rename-tab: ${result.output || result.error.message}`, "error");
+			else ctx.ui.notify(`Renamed tab to "${name}"`, "info");
+		},
+	});
 }

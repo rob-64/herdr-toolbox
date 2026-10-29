@@ -57,10 +57,11 @@ Tabs the user named themselves are left alone; only unnamed tabs (`1`, `2`,
 `HERDR_PLUGIN_STATE_DIR` (usually
 `~/.local/state/herdr/plugins/herdr-omo-toolbox`).
 
-## 4. Install the OmO extension (`/agents-board`)
+## 4. Install the OmO extension (`/agents-board`, `/rename-tab`)
 
-The extension adds `/agents-board [mode]` to OmO to open the agents board. OmO
-loads extensions from `~/.omo/agent/extensions/`.
+The extension adds `/agents-board [mode]` (opens the agents board) and
+`/rename-tab <name>` (renames the current tab) to OmO. OmO loads extensions from
+`~/.omo/agent/extensions/`.
 
 ```sh
 root=$(herdr plugin list --json --plugin herdr-omo-toolbox | jq -r '.result.plugins[0].plugin_root')

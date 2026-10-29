@@ -52,9 +52,9 @@ description = "OmO agents board"
 
 Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
 
-### `/agents-board` in OmO
+### OmO extension
 
-`board/omo-extension.js` is an OmO extension that adds `/agents-board [mode]` with tab completion for the mode:
+`board/omo-extension.js` is an OmO extension that adds `/agents-board [mode]` (with tab completion for the mode) and `/rename-tab <name>`:
 
 | Mode | Opens |
 | --- | --- |
@@ -65,6 +65,8 @@ Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
 | `zoomed` | New pane, zoomed to fill the tab |
 | `tab` | Its own tab |
 | `help` | Lists the modes |
+
+`/rename-tab <name>` renames the herdr tab this OmO session is in. After that, the tab watcher leaves that tab alone and stops auto-renaming it.
 
 Install it, then start a new OmO session or run `/reload`:
 
