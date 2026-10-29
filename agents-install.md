@@ -57,28 +57,35 @@ Tabs the user named themselves are left alone; only unnamed tabs (`1`, `2`,
 `HERDR_PLUGIN_STATE_DIR` (usually
 `~/.local/state/herdr/plugins/herdr-omo-toolbox`).
 
-## 4. Install the OmO extension (`/agents-board`, `/rename-tab`)
+## 4. Install the OmO extensions (board + status)
 
-The extension adds `/agents-board [mode]` (opens the agents board) and
-`/rename-tab <name>` (renames the current tab) to OmO. OmO loads extensions from
-`~/.omo/agent/extensions/`.
+The board extension adds `/agents-board [mode]` (opens the agents board) and
+`/rename-tab <name>` (renames the current tab). The status extension reports OmO
+idle/working/blocked state (including background tasks) to herdr. OmO loads
+extensions from `~/.omo/agent/extensions/`.
+
+If `omo list` shows `npm:omo-herdr`, tell the user it conflicts with the status
+extension and ask before removing it with `omo remove npm:omo-herdr`.
 
 ```sh
 root=$(herdr plugin list --json --plugin herdr-omo-toolbox | jq -r '.result.plugins[0].plugin_root')
 mkdir -p ~/.omo/agent/extensions
-cp "$root/board/omo-extension.js" ~/.omo/agent/extensions/herdr-omo-toolbox.js
+cp "$root"/omo_extensions/*.js ~/.omo/agent/extensions/
 rm -f ~/.omo/agent/extensions/herdr-omo-agents.js   # old extension; opens a plugin that no longer exists
 ```
 
 If `jq` is not installed, copy the `plugin_root` path from step 2 by hand, or
-download the file instead:
+download the files instead:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/rob-64/herdr-omo-toolbox/main/board/omo-extension.js \
+curl -fsSL https://raw.githubusercontent.com/rob-64/herdr-omo-toolbox/main/omo_extensions/herdr-omo-toolbox.js \
   -o ~/.omo/agent/extensions/herdr-omo-toolbox.js
+curl -fsSL https://raw.githubusercontent.com/rob-64/herdr-omo-toolbox/main/omo_extensions/herdr-omo-toolbox-status.js \
+  -o ~/.omo/agent/extensions/herdr-omo-toolbox-status.js
 ```
 
-Verify the copy: `grep -q 'herdr-omo-toolbox' ~/.omo/agent/extensions/herdr-omo-toolbox.js`.
+Verify the copies: `grep -q 'herdr-omo-toolbox' ~/.omo/agent/extensions/herdr-omo-toolbox.js` and
+`grep -q 'herdr-omo-toolbox.status' ~/.omo/agent/extensions/herdr-omo-toolbox-status.js`.
 
 The extension is picked up by new OmO sessions. Tell the user to run `/reload`
 in OmO sessions that are already open. The extension is a copy, so after a
@@ -138,6 +145,7 @@ Tell the user:
 herdr plugin action invoke herdr-omo-toolbox.tabs-stop   # strips icons/status from renamed tabs
 herdr plugin uninstall herdr-omo-toolbox
 rm -f ~/.omo/agent/extensions/herdr-omo-toolbox.js
+rm -f ~/.omo/agent/extensions/herdr-omo-toolbox-status.js
 ```
 
 Remove any `herdr-omo-toolbox.*` keybindings from `~/.config/herdr/config.toml`,

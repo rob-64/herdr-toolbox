@@ -54,7 +54,7 @@ Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
 
 ### OmO extension
 
-`board/omo-extension.js` is an OmO extension that adds `/agents-board [mode]` (with tab completion for the mode) and `/rename-tab <name>`:
+`omo_extensions/herdr-omo-toolbox.js` is an OmO extension that adds `/agents-board [mode]` (with tab completion for the mode) and `/rename-tab <name>`:
 
 | Mode | Opens |
 | --- | --- |
@@ -71,7 +71,7 @@ Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
 Install it, then start a new OmO session or run `/reload`:
 
 ```sh
-cp board/omo-extension.js ~/.omo/agent/extensions/herdr-omo-toolbox.js
+cp omo_extensions/herdr-omo-toolbox.js ~/.omo/agent/extensions/herdr-omo-toolbox.js
 ```
 
 Remove the old `herdr-omo-agents.js` extension if you had it installed.
@@ -121,6 +121,18 @@ Set `OMO_AGENTS_DIR` to read a different OmO agent directory.
 bin/agents-board --once --scope global --view dag --filter all --width 140
 bin/agents-board --json --scope session --session-pane w11:p1
 ```
+
+## Agent status
+
+When OmO runs inside a herdr pane, `omo_extensions/herdr-omo-toolbox-status.js` reports agent state back to herdr so the agent list shows whether OmO is idle, working, or blocked. **Background subagent tasks** (`running` or `pending`) count as **working**, so the spinner keeps going while OmO waits on subagents.
+
+The session name becomes the reported title when OmO has one. Install both extensions (new OmO session or `/reload`):
+
+```sh
+cp omo_extensions/*.js ~/.omo/agent/extensions/
+```
+
+This replaces the third-party **`omo-herdr`** npm package — do not run both. If you still have it: `omo remove npm:omo-herdr`.
 
 ## Tab titles, icons, alt-tab
 
@@ -184,7 +196,8 @@ This plugin's description includes **Automatic tab titles**, so **herdr-bar** de
 
 ## Layout
 
-- `board/` — live agents board (`main.mjs`, data/render, OmO extension)
+- `board/` — live agents board (`main.mjs`, data/render)
+- `omo_extensions/` — OmO extensions: `/agents-board` + `/rename-tab`, and agent status
 - `tabs/` — automatic tab titles, icons, MRU state, and tests
 - `bin/agents-board` — launcher for the board
 - `bin/tabs` — launcher for the tab watcher and actions
