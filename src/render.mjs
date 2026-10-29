@@ -13,7 +13,8 @@ const STATUS = {
   interrupted: ['!', '33'], lost: ['!', '33'], stale: ['!', '33'],
 };
 
-const seg = (text, style = '') => ({ text: String(text ?? ''), style });
+const seg = (text, style = '', action) => ({ text: String(text ?? ''), style, action });
+const ACTIVE_BG = '48;5;53';
 
 function icon(status, tick) {
   const [glyph, color] = STATUS[status] ?? ['?', '90'];
@@ -122,7 +123,8 @@ export function buildSessions(data, panes, filter, now) {
   for (const session of list) {
     session.active = session.tasks.filter(task => !task.terminal).length + session.runs.filter(run => !TERMINAL.has(run.status)).length;
   }
-  return list.sort((a, b) => Number(b.active > 0) - Number(a.active > 0) || b.lastActivity - a.lastActivity);
+  const busy = session => Number(session.active > 0) * 2 + Number(['working', 'blocked'].includes(session.pane?.agentStatus));
+  return list.sort((a, b) => busy(b) - busy(a) || b.lastActivity - a.lastActivity);
 }
 
 function orderTasks(tasks) {
@@ -159,13 +161,13 @@ function counts(sessions) {
   return total;
 }
 
-function sessionHeader(session, now, tick, columns) {
+function sessionHeader(session, now, tick, columns, active) {
   const live = session.pane;
   const status = live?.agentStatus;
   const running = session.tasks.filter(task => task.status === 'running').length;
   const done = session.tasks.filter(task => task.status === 'completed').length;
   const failed = session.tasks.filter(task => ['error', 'failed', 'stale'].includes(task.status)).length;
-  const parts = [seg('▍', live ? '36' : '90'), seg(sessionLabel(session), '1')];
+  const parts = [seg('▍', active ? '1;35' : live ? '36' : '90'), seg(sessionLabel(session), active ? '1;35' : '1')];
   if (columns >= 110 && session.pane && session.pane.title && session.project && !session.pane.title.includes(session.project)) parts.push(seg(`  ${session.project}`, '90'));
   parts.push(seg('  '));
   if (live) parts.push(status === 'working' ? seg(`${SPINNER[tick % SPINNER.length]} working`, '33') : status === 'blocked' ? seg('◇ needs input', '35') : seg(`● ${status ?? 'live'}`, '36'));
@@ -221,14 +223,14 @@ function bar(run, size) {
     seg(` ${done}/${run.nodes.length}`, '90')];
 }
 
-function dagRows(run, session, tasksById, columns, now, tick, showSession) {
+function dagRows(run, session, tasksById, columns, now, tick, showSession, active) {
   const rows = [];
   const runStart = Math.min(...run.nodes.map(node => node.startedAt ?? Infinity), run.createdAt || Infinity);
   const runEnd = TERMINAL.has(run.status) ? run.updatedAt : now;
   const head = [seg('⧉ ', '36'), seg(run.name, '1'), seg('  '), icon(run.status, tick), seg(` ${run.status}  `, STATUS[run.status]?.[1] ?? '90'), ...bar(run, 16),
     seg(`  ${Number.isFinite(runStart) ? duration(runEnd - runStart) : ''}`, '90')];
-  if (showSession) head.push(seg(`   ${sessionLabel(session)}`, '90'));
-  rows.push({ key: `run:${run.id}`, target: { sessionId: session.id }, segments: head, detail: `${run.name} · ${run.key ?? run.id} · ${run.nodes.length} nodes` });
+  if (showSession) head.push(seg(`   ${sessionLabel(session)}`, active ? '1;35' : '90'));
+  rows.push({ key: `run:${run.id}`, target: { sessionId: session.id }, background: active ? ACTIVE_BG : undefined, segments: head, detail: `${run.name} · ${run.key ?? run.id} · ${run.nodes.length} nodes` });
   const layers = stages(run);
   layers.forEach((layer, index) => {
     const last = index === layers.length - 1;
@@ -273,14 +275,16 @@ export function buildView(data, panes, ui, now, columns, tick = 0) {
     for (const session of scoped) {
       for (const run of session.runs.slice().sort((a, b) => Number(TERMINAL.has(a.status)) - Number(TERMINAL.has(b.status)) || b.updatedAt - a.updatedAt)) {
         if (rows.length) rows.push({ segments: [] });
-        rows.push(...dagRows(run, session, tasksById, columns, now, tick, ui.scope === 'global'));
+        rows.push(...dagRows(run, session, tasksById, columns, now, tick, ui.scope === 'global', session.id === ui.activeSessionId));
       }
     }
   } else {
     for (const session of scoped) {
-      if (ui.scope === 'global' && !session.tasks.length) continue;
-      if (rows.length) rows.push({ segments: [] });
-      rows.push({ key: `session:${session.id}`, target: { sessionId: session.id }, segments: sessionHeader(session, now, tick, columns),
+      if (ui.scope === 'global' && !session.tasks.length && !session.pane) continue;
+      if (rows.length && (session.tasks.length || !rows[rows.length - 1].header)) rows.push({ segments: [] });
+      const active = session.id === ui.activeSessionId;
+      rows.push({ key: `session:${session.id}`, target: { sessionId: session.id }, header: true, background: active ? ACTIVE_BG : undefined,
+        segments: sessionHeader(session, now, tick, columns, active),
         detail: `session ${session.id}${session.pane ? ` · pane ${session.pane.paneId}` : ''} · ${session.allTasks} subagents total` });
       const ordered = orderTasks(session.tasks);
       const finishedLimit = ui.scope === 'global' ? 5 : Infinity;
@@ -297,7 +301,7 @@ export function buildView(data, panes, ui, now, columns, tick = 0) {
         if (task.error && ['error', 'failed'].includes(task.status)) rows.push({ segments: detailRow(level, task.error, '31') });
       }
       if (hidden) rows.push({ segments: [seg(`    +${hidden} more finished · s shows this whole session`, '90')] });
-      if (!session.tasks.length) rows.push({ segments: [seg('    no subagents match this filter', '90')] });
+      if (!session.tasks.length && ui.scope === 'session') rows.push({ segments: [seg('    no subagents match this filter', '90')] });
     }
   }
   return { rows, sessions: sessionList, current, totals: counts(scoped) };
@@ -305,11 +309,11 @@ export function buildView(data, panes, ui, now, columns, tick = 0) {
 
 export function header(view, ui, now, columns) {
   const scope = ui.scope === 'global'
-    ? [seg(' GLOBAL ', '1;7;36')]
-    : [seg(' SESSION ', '1;7;35'), seg(` ${view.current ? fit(sessionLabel(view.current), Math.min(width(sessionLabel(view.current)), Math.max(12, columns - 64))) : 'none selected'}`, '35')];
-  const tab = (name, id) => seg(` ${name} `, ui.view === id ? '1;7' : '90');
+    ? [seg(' GLOBAL ', '1;7;36', 'scope')]
+    : [seg(' SESSION ', '1;7;35', 'scope'), seg(` ${view.current ? fit(sessionLabel(view.current), Math.min(width(sessionLabel(view.current)), Math.max(12, columns - 64))) : 'none selected'}`, '35', 'scope')];
+  const tab = (name, id) => seg(` ${name} `, ui.view === id ? '1;7' : '90', `view:${id}`);
   const t = view.totals;
-  const left = [seg(' OmO Agents ', '1'), seg(' '), ...scope, seg('  '), tab('Agents', 'agents'), tab('DAG', 'dag'), seg(`  filter:${ui.filter}`, '90')];
+  const left = [seg(' OmO Agents ', '1'), seg(' '), ...scope, seg('  '), tab('Agents', 'agents'), tab('DAG', 'dag'), seg('  '), seg(`filter:${ui.filter}`, '90', 'filter')];
   const right = [seg(`${SPINNER[0]} ${t.running} running`, t.running ? '33' : '90'), seg('  '), seg(`○ ${t.waiting}`, '90'), seg('  '),
     seg(`✔ ${t.completed}`, '32'), seg('  '), seg(`✖ ${t.failed}`, t.failed ? '31' : '90'), seg(`  ${new Date(now).toTimeString().slice(0, 8)} `, '90')];
   const compact = [seg(`${SPINNER[0]}${t.running}`, t.running ? '33' : '90'), seg(` ✔${t.completed}`, '32'), seg(` ✖${t.failed} `, t.failed ? '31' : '90')];
@@ -321,8 +325,8 @@ export function header(view, ui, now, columns) {
   return [line, [seg('─'.repeat(columns), '90')]];
 }
 
-export const HINTS = 'g global/session  s this session  v agents/dag  a filter  [ ] session  j/k move  ⏎ jump to pane  q quit';
-const SHORT_HINTS = 'g scope  s session  v view  a filter  [ ]  j/k  ⏎ jump  q quit';
+export const HINTS = 'click select · click again/⏎ jump  g global/session  s session  v agents/dag  a filter  [ ] cycle  j/k  q quit';
+const SHORT_HINTS = 'click  g scope  s session  v view  a filter  [ ]  j/k  q quit';
 
 export function footer(selected, columns, message) {
   return [[seg('─'.repeat(columns), '90')], [seg(message ?? selected?.detail ?? '', message ? '33' : '')], [seg(width(HINTS) <= columns ? HINTS : SHORT_HINTS, '90')]];

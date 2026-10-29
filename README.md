@@ -57,16 +57,20 @@ cp omo/agents-command.js ~/.omo/agent/extensions/herdr-omo-agents.js
 | `[` `]` | Previous / next session |
 | `v` or `Tab` | Toggle **Agents** / **DAG** view |
 | `a` | Cycle filter: `active` → `today` → `all` |
-| `j` `k` / arrows | Move selection |
+| `j` `k` / arrows / wheel | Move selection |
 | `Enter` | Focus the herdr pane that owns the selected session |
 | `r` | Refresh now |
 | `q` / `Esc` | Close |
 
-The view, scope, and filter you leave it on are remembered.
+It opens in **global** scope, **Agents** view, filter **active**.
+
+**Mouse:** click a row to select it and click it again to jump to its pane. Click a session header to open that session and click it again to go back to global. In the header, click `GLOBAL`/`SESSION`, `Agents`/`DAG`, or `filter:` to switch them.
+
+The session in the herdr pane you last focused is highlighted.
 
 ## What it shows
 
-- **Agents view**: one block per OmO session, labelled with its herdr pane and title. Each subagent shows its status, agent or category, task summary, model, elapsed time, and turns/tool calls. Running subagents get a live line with the current tool call and the latest thought. In global scope, each session lists at most 5 finished subagents; `s` shows the rest.
+- **Agents view**: one block per OmO session, labelled with its herdr pane and title. Open OmO panes are listed even when they have no subagents, so you can see which ones are working or waiting for input. Each subagent shows its status, agent or category, task summary, model, elapsed time, and turns/tool calls. Running subagents get a live line with the current tool call and the latest thought. In global scope, each session lists at most 5 finished subagents; `s` shows the rest.
 - **DAG view**: each `mass ulw` / DAG run with a progress bar, then its nodes by stage with dependencies (`← build`), route, attempt, and elapsed time. Failed nodes show their error.
 - **Stale detection**: a subagent still marked running whose host process is gone is flagged `!`.
 

@@ -1,8 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { anchorPane, defaultAgentDir, paneSessions, Store } from './data.mjs';
-import { buildView, emptyRows, FILTERS, footer, header, paint } from './render.mjs';
+import { buildView, emptyRows, FILTERS, footer, header, paint, width } from './render.mjs';
 
 const VIEWS = ['agents', 'dag'];
 const SCOPES = ['global', 'session'];
@@ -42,27 +42,9 @@ const USAGE = `omo-agents: live board of OmO subagents and DAG runs
   --width N --height N      frame size for --once      --no-color
   --agent-dir <path>        OmO agent dir (default ~/.omo/agent)
 
-keys: g global/session  s selected session  v/Tab agents/dag  a filter  [ ] session  j/k move  Enter jump  r refresh  q quit`;
-
-function prefsPath() {
-  return process.env.HERDR_PLUGIN_STATE_DIR ? join(process.env.HERDR_PLUGIN_STATE_DIR, 'prefs.json') : undefined;
-}
-
-function loadPrefs() {
-  const path = prefsPath();
-  if (!path) return {};
-  try { return JSON.parse(readFileSync(path, 'utf8')); }
-  catch { return {}; }
-}
-
-function savePrefs(ui) {
-  const path = prefsPath();
-  if (!path) return;
-  try {
-    mkdirSync(process.env.HERDR_PLUGIN_STATE_DIR, { recursive: true });
-    writeFileSync(path, JSON.stringify({ view: ui.view, scope: ui.scope, filter: ui.filter }));
-  } catch { /* prefs are a convenience; the board works without them */ }
-}
+keys: g global/session  s selected session  v/Tab agents/dag  a filter  [ ] session  j/k move  Enter jump  r refresh  q quit
+mouse: click a row to select it, click it again to jump to its pane; click a session header to open/close
+       that session; click GLOBAL/SESSION, Agents/DAG, or filter in the header; wheel scrolls`;
 
 function herdr(args) {
   return new Promise(resolve => {
@@ -74,12 +56,12 @@ class Board {
   constructor(options) {
     this.options = options;
     this.store = new Store(options.agentDir ?? defaultAgentDir());
-    const prefs = loadPrefs();
     this.ui = {
-      view: options.view ?? prefs.view ?? 'agents',
-      scope: options.scope ?? prefs.scope ?? 'session',
-      filter: options.filter ?? prefs.filter ?? 'today',
+      view: options.view ?? 'agents',
+      scope: options.scope ?? 'global',
+      filter: options.filter ?? 'active',
       sessionId: options.session,
+      activeSessionId: undefined,
       selectedKey: undefined,
       selectedIndex: 0,
       scroll: 0,
@@ -99,6 +81,18 @@ class Board {
   async refreshPanes() {
     this.panes = await paneSessions(this.store);
     this.resolveSession();
+    this.trackActiveSession();
+  }
+
+  trackActiveSession() {
+    const own = process.env.HERDR_PLUGIN_ENTRYPOINT_ID ? process.env.HERDR_PANE_ID : undefined;
+    for (const pane of this.panes.panes.values()) {
+      if (pane.focused && pane.pane_id !== own && this.panes.byPane.has(pane.pane_id)) {
+        this.ui.activeSessionId = this.panes.byPane.get(pane.pane_id);
+        return;
+      }
+    }
+    this.ui.activeSessionId ??= this.anchor ? this.panes.byPane.get(this.anchor) : undefined;
   }
 
   resolveSession() {
@@ -140,9 +134,17 @@ class Board {
     this.ui.scroll = Math.max(0, Math.min(this.ui.scroll, Math.max(0, body.length - bodyHeight)));
     const visible = body.slice(this.ui.scroll, this.ui.scroll + bodyHeight);
     const lines = top.map(segments => paint(segments, columns, { color }));
+    const hits = [];
+    let x = 1;
+    for (const part of top[0]) {
+      const w = width(part.text);
+      if (part.action) hits.push({ from: x, to: x + w, action: part.action });
+      x += w;
+    }
+    this.layout = { hits, bodyStart: top.length + 1, visible: view.rows.length ? visible : [] };
     visible.forEach((row, index) => {
       const selected = view.rows.length && this.ui.scroll + index === target;
-      lines.push(paint(row.segments, columns, { color, background: selected ? SELECTED_BG : undefined }));
+      lines.push(paint(row.segments, columns, { color, background: selected ? SELECTED_BG : row.background }));
     });
     while (lines.length < rows - bottom.length) lines.push(' '.repeat(columns));
     lines.push(...bottom.map(segments => paint(segments, columns, { color })));
@@ -171,6 +173,7 @@ class Board {
     this.ui.scope = this.ui.scope === 'global' ? 'session' : 'global';
     if (this.ui.scope === 'session') {
       this.resolveSession();
+      this.ui.sessionId ??= this.ui.activeSessionId;
       if (!this.ui.sessionId && this.sessions?.length) {
         this.ui.sessionId = this.sessions[0].id;
         this.ui.message = 'No OmO session in the pane that opened this board; showing the most recent one.';
@@ -182,11 +185,46 @@ class Board {
 
   showSelectedSession() {
     const sessionId = this.selected?.target?.sessionId;
-    if (!sessionId) return;
+    if (sessionId) this.showSession(sessionId);
+  }
+
+  showSession(sessionId) {
     this.ui.scope = 'session';
     this.ui.sessionId = sessionId;
     this.ui.selectedKey = undefined;
     this.ui.selectedIndex = 0;
+  }
+
+  toggleView(view) {
+    this.ui.view = view ?? (this.ui.view === 'agents' ? 'dag' : 'agents');
+    this.ui.selectedKey = undefined;
+    this.ui.selectedIndex = 0;
+  }
+
+  cycleFilter() {
+    this.ui.filter = FILTERS[(FILTERS.indexOf(this.ui.filter) + 1) % FILTERS.length];
+  }
+
+  click(x, y) {
+    if (!this.layout) return undefined;
+    if (y === 1) {
+      const hit = this.layout.hits.find(entry => x >= entry.from && x < entry.to);
+      if (hit?.action === 'scope') this.toggleScope();
+      else if (hit?.action === 'filter') this.cycleFilter();
+      else if (hit?.action?.startsWith('view:')) this.toggleView(hit.action.slice(5));
+      return undefined;
+    }
+    const row = this.layout.visible[y - this.layout.bodyStart];
+    if (!row?.key) return undefined;
+    if (row.header) {
+      const open = this.ui.scope === 'session' && this.ui.sessionId === row.target.sessionId;
+      if (open) { this.ui.scope = 'global'; this.ui.selectedKey = row.key; }
+      else this.showSession(row.target.sessionId);
+      return undefined;
+    }
+    if (row.key === this.ui.selectedKey) return 'jump';
+    this.ui.selectedKey = row.key;
+    return undefined;
   }
 
   async jump() {
@@ -207,13 +245,12 @@ async function interactive(board) {
   const restore = () => {
     for (const timer of timers) clearInterval(timer);
     if (input.isTTY) input.setRawMode(false);
-    out.write('\x1b[0m\x1b[?25h\x1b[?1049l');
+    out.write('\x1b[?1000l\x1b[?1006l\x1b[0m\x1b[?25h\x1b[?1049l');
   };
   const quit = (code = 0) => {
     if (closing) return;
     closing = true;
     restore();
-    savePrefs(board.ui);
     process.exit(code);
   };
   const draw = () => {
@@ -223,7 +260,7 @@ async function interactive(board) {
     if (frame !== board.last) out.write(frame);
     board.last = frame;
   };
-  out.write('\x1b[?1049h\x1b[?25l\x1b[2J');
+  out.write('\x1b[?1049h\x1b[?25l\x1b[2J\x1b[?1000h\x1b[?1006h');
   process.on('SIGTERM', () => quit(0));
   process.on('SIGHUP', () => quit(0));
   process.on('uncaughtException', error => { restore(); console.error(error); process.exit(1); });
@@ -236,15 +273,23 @@ async function interactive(board) {
   draw();
 
   timers.push(setInterval(() => { board.refreshData(); }, 1500));
-  timers.push(setInterval(() => { board.refreshPanes().then(draw, () => {}); }, 4000));
+  timers.push(setInterval(() => { board.refreshPanes().then(draw, () => {}); }, 2000));
   timers.push(setInterval(() => { board.tick += 1; draw(); }, 250));
 
   if (input.isTTY) input.setRawMode(true);
   input.setEncoding('utf8');
   input.on('data', async chunk => {
     const popup = process.env.HERDR_PLUGIN_ENTRYPOINT_ID === 'board';
-    for (const key of chunk.match(/\x1b\[[0-9;]*[A-Za-z~]|\x1bO[A-Z]|[\s\S]/g) ?? []) {
+    for (const key of chunk.match(/\x1b\[<\d+;\d+;\d+[Mm]|\x1b\[[0-9;]*[A-Za-z~]|\x1bO[A-Z]|[\s\S]/g) ?? []) {
       board.ui.message = undefined;
+      const mouse = key.match(/^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/);
+      if (mouse) {
+        const [button, x, y] = mouse.slice(1, 4).map(Number);
+        if (button === 64) board.move(-3);
+        else if (button === 65) board.move(3);
+        else if (button === 0 && mouse[4] === 'M' && board.click(x, y) === 'jump' && await board.jump() && popup) return quit(0);
+        continue;
+      }
       if (key === 'q' || key === '\x03' || key === '\x1b') return quit(0);
       if (key === 'j' || key === '\x1b[B' || key === '\x1bOB') board.move(1);
       else if (key === 'k' || key === '\x1b[A' || key === '\x1bOA') board.move(-1);
@@ -253,13 +298,12 @@ async function interactive(board) {
       else if (key === 'G') board.move(1e6);
       else if (key === 'g') board.toggleScope();
       else if (key === 's') board.showSelectedSession();
-      else if (key === 'v' || key === '\t') { board.ui.view = board.ui.view === 'agents' ? 'dag' : 'agents'; board.ui.selectedKey = undefined; board.ui.selectedIndex = 0; }
-      else if (key === 'a') board.ui.filter = FILTERS[(FILTERS.indexOf(board.ui.filter) + 1) % FILTERS.length];
+      else if (key === 'v' || key === '\t') board.toggleView();
+      else if (key === 'a') board.cycleFilter();
       else if (key === ']') board.cycleSession(1);
       else if (key === '[') board.cycleSession(-1);
       else if (key === 'r') { board.refreshData(); await board.refreshPanes(); }
       else if (key === '\r' || key === '\n') { if (await board.jump() && popup) return quit(0); }
-      savePrefs(board.ui);
     }
     draw();
   });
@@ -286,6 +330,9 @@ async function main() {
         anchor: board.anchor ?? null,
         scope: board.ui.scope,
         sessionId: board.ui.sessionId ?? null,
+        activeSessionId: board.ui.activeSessionId ?? null,
+        view: board.ui.view,
+        filter: board.ui.filter,
         tasks: board.data.tasks.length,
         runs: board.data.runs.length,
         sessions: board.sessions.map(session => ({ id: session.id, pane: session.pane?.paneId ?? null, title: session.pane?.title ?? null, project: session.project, tasks: session.tasks.length, runs: session.runs.length })),
