@@ -11,16 +11,18 @@ const STATUS_GLYPH = {
 const URGENCY = ['blocked', 'working', 'done', 'idle', 'unknown'];
 
 const DEFAULT_ICONS = {
-  omo: '\u{F09DF}',
-  claude: '\u{F06C4}',
-  codex: '\u{F0169}',
-  pi: '\u{F03FF}',
-  gemini: '\u{F0AE2}',
-  cursor: '\u{F01BF}',
-  opencode: '\u{F018D}',
-  copilot: '\u{F4B8}',
-  default: '\u{F06A9}',
+  omo: '\u{F03C9}', // md-omega
+  claude: '\u{F06C4}', // md-asterisk
+  codex: '\u{F0169}', // md-code_braces
+  pi: '\u{F03FF}', // md-pi
+  gemini: '\u{F0AE2}', // md-star_four_points
+  cursor: '\u{F01BF}', // md-cursor_default_outline
+  opencode: '\u{F018D}', // md-console
+  copilot: '\u{F4B8}', // oct-copilot
+  default: '\u{F06A9}', // md-robot
 };
+
+const LEGACY_ICONS = new Set([String.fromCodePoint(0xF0000 + 0x9df)]);
 
 const ALL_GLYPHS = new Set(Object.values(STATUS_GLYPH));
 const ALL_ICONS = new Set(Object.values(DEFAULT_ICONS));
@@ -56,7 +58,7 @@ export function stripPrefix(label) {
 
   let i = 0;
   const nextIsGlyph = (idx) => idx + 1 < parts.length && ALL_GLYPHS.has(parts[idx + 1]);
-  if (ALL_ICONS.has(parts[0]) || nextIsGlyph(0)) i = 1;
+  if (ALL_ICONS.has(parts[0]) || LEGACY_ICONS.has(parts[0]) || nextIsGlyph(0)) i = 1;
   if (i < parts.length && ALL_GLYPHS.has(parts[i])) i += 1;
   if (i === 0) return label.trim();
   return parts.slice(i).join(' ');

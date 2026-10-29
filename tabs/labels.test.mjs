@@ -297,6 +297,22 @@ describe('plan', () => {
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
     assert.equal(renames.length, 0);
   });
+
+  it('migrates owned tab from legacy omo icon to md-omega', () => {
+    const legacyOmo = String.fromCodePoint(0xF0000 + 0x9df);
+    const ownedLabel = `${legacyOmo} ✓ Fix login`;
+    const snapshot = snap(
+      [tab('w0:t1', ownedLabel)],
+      [agent('w0:p1', 'w0:t1', { agent_status: 'idle' })],
+    );
+    const { renames } = plan(
+      snapshot,
+      { owned: { 'w0:t1': ownedLabel }, released: [] },
+      defaultConfig,
+    );
+    assert.equal(renames.length, 1);
+    assert.equal(renames[0].label, `${OMO} ✓ Fix login`);
+  });
 });
 
 describe('folderName', () => {

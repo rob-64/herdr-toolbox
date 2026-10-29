@@ -127,7 +127,7 @@ bin/agents-board --json --scope session --session-pane w11:p1
 Makes tabs usable with OmO agents:
 
 - **Automatic tab titles** from each agent's task title (not the live terminal title). Before the agent has a task title, the tab shows the agent's folder name (last segment of its working directory).
-- **Icons and status** in the tab bar, e.g. `󰧟 ◐ Fix merge conflicts PR 7`.
+- **Icons and status** in the tab bar, e.g. `󰏉 ◐ Fix merge conflicts PR 7`.
 - **Last tab** action — MRU alt-tab across workspaces.
 
 Requires a **Nerd Font** (e.g. Hack Nerd Font Mono) for agent icons.
@@ -160,7 +160,7 @@ Optional file: `HERDR_PLUGIN_CONFIG_DIR/config.json` (typically under your Herdr
 
 ```json
 {
-  "icons": { "omo": "󰧟" },
+  "icons": { "omo": "󰏉" },
   "status": true,
   "max_title": 32
 }
