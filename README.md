@@ -196,16 +196,28 @@ bin/agents-board --json --view tasks
 Lists every GitHub pull request you opened, committed to, commented on, or reviewed, grouped by repository and refreshed every 2 minutes by default (`t` or clicking `refresh:` cycles 30s / 60s / 120s / 300s; `r` refreshes now). It uses the `gh` CLI, so it needs `gh` on `PATH` and `gh auth login` done.
 
 ```
- @octocat   filter:open   role:any   refresh:120s                                      ●9 4s ago
-────────────────────────────────────────────────────────────────────────────────────────────────
+ @octocat   filter:open   role:any   refresh:120s                                         ●3 4s ago
+────────────────────────────────────────────────────────────────────────────────────────────────────
 ▍acme/falcon  2 PRs
-  ● #31    ci: open image bump PRs from the newest registry tags  ··✎R  alice   ✔ review     40m
-  ● #32    ci: check that images exist in the registry, gate CI   O···  you     ✔ review      2h
+ ▾ ● #31    ci: open image bump PRs from the newest regi… ··✎R  alice         ✖ 9/10  review     40m
+      ✖ ci #5                                                                  1 failed        1m05s
+        ✔ lint                                                                                   30s
+        ✖ deps                                                                                 1m05s
+        ↷ 2 skipped: build, release
+      ✔ PR title #7                                                            1 job              6s
+        ✔ title                                                                                   6s
+      ✔ Commit statuses                                                        1 status
+        ✔ security/snyk                                                        1 test pass…
+ ▸ ● #32    ci: check that images exist in the registry,… O···  you           ● 3/8   review      2h
 ▍acme/condor  1 PR
-  ● #1     ci: build and release with GitHub Actions              OC✎R  you     ✖ review     46h
+ ▸ ● #1     ci: build and release with GitHub Actions     OC✎R  you           ✔ 6/6   approved   46h
 ```
 
-The role column shows how you're involved: `O` opened, `C` committed, `✎` commented, `R` reviewed. State is `●` open, `○` draft, `◆` merged, `✖` closed; then the author, the CI checks (`✔` `✖` `●`), the review decision, and the time since the last update.
+The role column shows how you're involved: `O` opened, `C` committed, `✎` commented, `R` reviewed. State is `●` open, `○` draft, `◆` merged, `✖` closed; then the author, CI, the review decision, and the time since the last update. CI is the number of checks that passed out of those that count (skipped and neutral ones are left out), covering GitHub Actions jobs, other apps' check runs and commit statuses on the PR's last commit: `✖` when any failed or was cancelled, `●` while any are still running, `✔` otherwise.
+
+### CI drill-down
+
+PRs with checks have a `▸`. Press `l`, `→` or `Space` (or click the `▸`) to expand one: its checks are fetched and grouped by GitHub Actions workflow run (`ci #5`), with the jobs underneath, then other apps' checks and the commit statuses. Each row shows its state and how long it took (or has been running); skipped jobs are folded into one row. Failing and running groups come first. Press `Enter` on a workflow, job or status to open it in the browser. Expanded PRs refetch their checks on every refresh. `h` or `←` goes back to the PR, and again folds it.
 
 Where the PRs come from:
 
@@ -236,7 +248,9 @@ Or from OmO: `/pr-board [mode]`, with the same modes as `/agents-board`.
 | Key | Action |
 | --- | --- |
 | `j` `k` / ↑ ↓ / wheel | Move selection |
-| `Enter` / `o` / click again | Open the PR in the browser (`gh pr view --web`) |
+| `Enter` / `o` / click again | Open the PR (`gh pr view --web`), or the selected workflow, job or status |
+| `l` `→` / `Space` / click `▸` | Show the PR's checks (`Space` toggles) |
+| `h` `←` | From a check, back to its PR; on a PR, hide its checks |
 | `f` | Cycle filter: `open` → `recent` (updated in the last 30 days) → `all` |
 | `m` | Cycle role: `any` → `opened` → `committed` → `commented` (includes reviewed) |
 | `t` | Cycle the refresh timer: `30s` → `60s` → `120s` (default) → `300s` |

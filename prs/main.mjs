@@ -36,7 +36,7 @@ const USAGE = `pr-board: GitHub pull requests you opened, committed to, commente
   --once                              print one frame and exit   --json   print the loaded PRs
   --width N --height N                frame size for --once      --no-color
 
-keys: j/k move  Enter/o open in browser  f filter  m role  t refresh timer  r refresh  g/G top/bottom  q quit
+keys: j/k move  Enter/o open in browser  l/→/Space show checks  h/← back  f filter  m role  t refresh timer  r refresh  g/G top/bottom  q quit
 mouse: click a row to select it, click it again to open it; wheel scrolls
 env: GH_BIN overrides the gh binary`;
 
@@ -49,6 +49,9 @@ class Board {
       filter: options.filter ?? (FILTERS.includes(envFilter) ? envFilter : 'open'),
       role: options.role ?? 'any',
       refresh: options.refresh ?? 120,
+      // Drill-down: PRs whose checks are shown, and their fetched checks (url -> { loading, error, groups }).
+      expanded: new Set(),
+      checks: new Map(),
       selectedKey: undefined,
       selectedIndex: 0,
       scroll: 0,
@@ -76,6 +79,7 @@ class Board {
       this.notifyReady = !result.errors.length;
       this.data = { ...result, loading: false };
       this.loadedFilter = filter;
+      for (const url of this.ui.expanded) this.loadChecks(url);
       if (ready && events.length) return this.notify(events);
     }).finally(() => {
       this.pending = undefined;
@@ -177,16 +181,63 @@ class Board {
     }
     const row = this.layout.visible[y - this.layout.bodyStart];
     if (!row?.key) return undefined;
+    // The ▸/▾ marker at the start of a PR row toggles its checks.
+    if (row.foldable && x <= 3) {
+      this.ui.selectedKey = row.key;
+      this.toggleChecks(row.key);
+      return undefined;
+    }
     if (row.key === this.ui.selectedKey) return 'open';
     this.ui.selectedKey = row.key;
     return undefined;
   }
 
+  loadChecks(url) {
+    const before = this.ui.checks.get(url);
+    this.ui.checks.set(url, { ...before, loading: true });
+    return this.store.checks(url).then(
+      groups => this.ui.checks.set(url, { groups, fetchedAt: Date.now() }),
+      // Keep the last good checks on screen when a refetch fails.
+      error => this.ui.checks.set(url, { ...before, loading: false, error: error.message }),
+    ).finally(() => this.onChange?.());
+  }
+
+  toggleChecks(url) {
+    if (this.ui.expanded.has(url)) this.ui.expanded.delete(url);
+    else this.expandChecks(url);
+  }
+
+  expandChecks(url) {
+    if (this.ui.expanded.has(url)) return;
+    this.ui.expanded.add(url);
+    this.loadChecks(url);
+  }
+
+  // Space / l / → on a PR row; nothing on PRs without checks or on check rows.
+  expandSelected(toggle) {
+    const row = this.selected;
+    if (!row?.foldable) return;
+    if (toggle) this.toggleChecks(row.key);
+    else this.expandChecks(row.key);
+  }
+
+  // h / ←: on a check row jump to its PR, on an expanded PR fold it.
+  collapseSelected() {
+    const row = this.selected;
+    if (row?.parentKey) this.ui.selectedKey = row.parentKey;
+    else if (row && this.ui.expanded.has(row.key)) this.ui.expanded.delete(row.key);
+  }
+
   openSelected() {
-    const url = this.selected?.target?.url;
+    const row = this.selected;
+    const url = row?.target?.url;
     if (!url) return Promise.resolve(false);
+    // PRs go through gh (its browser setting); workflow, job and status links open with the system opener.
+    const [bin, args] = row.parentKey
+      ? [process.platform === 'darwin' ? 'open' : 'xdg-open', [url]]
+      : [process.env.GH_BIN || 'gh', ['pr', 'view', url, '--web']];
     return new Promise(resolve => {
-      execFile(process.env.GH_BIN || 'gh', ['pr', 'view', url, '--web'], { timeout: 15000 }, (error, stdout, stderr) => {
+      execFile(bin, args, { timeout: 15000 }, (error, stdout, stderr) => {
         if (error) this.ui.message = `Could not open ${url}: ${String(stderr || error.message).trim().split('\n')[0].slice(0, 120)}`;
         resolve(!error);
       });
@@ -256,8 +307,11 @@ async function interactive(board) {
       if (key === 'q' || key === '\x03' || key === '\x1b') return quit(0);
       if (key === 'j' || key === '\x1b[B' || key === '\x1bOB') board.move(1);
       else if (key === 'k' || key === '\x1b[A' || key === '\x1bOA') board.move(-1);
-      else if (key === '\x1b[6~' || key === ' ') board.move(10);
+      else if (key === '\x1b[6~') board.move(10);
       else if (key === '\x1b[5~') board.move(-10);
+      else if (key === ' ') board.expandSelected(true);
+      else if (key === 'l' || key === '\x1b[C' || key === '\x1bOC') board.expandSelected(false);
+      else if (key === 'h' || key === '\x1b[D' || key === '\x1bOD') board.collapseSelected();
       else if (key === 'g') board.move(-1e6);
       else if (key === 'G') board.move(1e6);
       else if (key === 'f') board.cycleFilter();

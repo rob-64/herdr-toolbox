@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { filterQualifier, ghRunner, mergePrs, normalizePr, prChanges, PrStore, pushedBranches } from './data.mjs';
+import { ciCounts, filterQualifier, ghRunner, mergePrs, normalizeChecks, normalizePr, prChanges, PrStore, pushedBranches } from './data.mjs';
 
 const now = Date.parse('2026-10-30T12:00:00.000Z');
 const LOGIN = 'me';
@@ -62,6 +62,57 @@ test('prChanges reports open PRs others opened that are new, and approvals on PR
     ['opened', pr(4, { author: { login: LOGIN } })],
   )), ['approved #2'], 'reviewer-only approval, merged and your own new PRs are not news');
   assert.deepEqual(changes(load(['opened', pr(2, { author: { login: LOGIN }, reviewDecision: 'APPROVED' })])), [], 'approval reported once');
+});
+
+test('ciCounts leaves skipped and neutral checks out and counts statuses with check runs', () => {
+  assert.deepEqual(ciCounts({
+    checkRunCountsByState: [{ state: 'SUCCESS', count: 6 }, { state: 'SKIPPED', count: 11 }, { state: 'NEUTRAL', count: 1 }, { state: 'FAILURE', count: 1 }, { state: 'CANCELLED', count: 1 }, { state: 'IN_PROGRESS', count: 2 }],
+    statusContextCountsByState: [{ state: 'SUCCESS', count: 3 }, { state: 'PENDING', count: 1 }],
+  }), { passed: 9, failed: 2, pending: 3, relevant: 14 });
+  assert.equal(ciCounts(undefined), undefined);
+});
+
+const checkRun = (name, workflow, run, status, conclusion, extra = {}) => ({
+  __typename: 'CheckRun', name, status, conclusion,
+  startedAt: '2026-10-30T10:00:00Z', completedAt: status === 'COMPLETED' ? '2026-10-30T10:01:05Z' : null,
+  detailsUrl: `https://github.com/acme/app/actions/runs/${run}/job/${name}`,
+  checkSuite: workflow ? { app: { name: 'GitHub Actions' }, workflowRun: { runNumber: run, url: `https://github.com/acme/app/actions/runs/${run}`, workflow: { name: workflow } } } : { app: { name: 'Codecov' }, workflowRun: null },
+  ...extra,
+});
+
+test('normalizeChecks groups jobs by workflow run, other apps and commit statuses, failures first', () => {
+  const groups = normalizeChecks([
+    checkRun('lint', 'ci', 5, 'COMPLETED', 'SUCCESS'),
+    checkRun('title', 'PR title', 7, 'COMPLETED', 'SUCCESS'),
+    checkRun('deps', 'ci', 5, 'COMPLETED', 'FAILURE'),
+    checkRun('build', 'ci', 5, 'COMPLETED', 'SKIPPED'),
+    checkRun('e2e', 'nightly', 9, 'IN_PROGRESS', null),
+    checkRun('codecov/patch', null, 0, 'COMPLETED', 'NEUTRAL'),
+    { __typename: 'StatusContext', context: 'security/snyk', state: 'SUCCESS', targetUrl: 'https://snyk.example/1', description: 'passed' },
+  ]);
+  assert.deepEqual(groups.map(group => [group.kind, group.name, group.state, group.jobs.map(job => `${job.name}:${job.state}`).join(' ')]), [
+    ['workflow', 'ci #5', 'failure', 'lint:success deps:failure build:skipped'],
+    ['workflow', 'nightly #9', 'pending', 'e2e:pending'],
+    ['workflow', 'PR title #7', 'success', 'title:success'],
+    ['status', 'Commit statuses', 'success', 'security/snyk:success'],
+    ['app', 'Codecov', 'skipped', 'codecov/patch:skipped'],
+  ]);
+  assert.equal(groups[0].url, 'https://github.com/acme/app/actions/runs/5');
+  assert.equal(groups[0].jobs[1].url, 'https://github.com/acme/app/actions/runs/5/job/deps');
+  assert.equal(groups[0].completedAt - groups[0].startedAt, 65_000);
+  assert.equal(groups[1].completedAt, undefined, 'a running group has no end');
+});
+
+test('checks() fetches one PR by url and surfaces gh failures', async () => {
+  const calls = [];
+  const ok = new PrStore({ run: async args => {
+    calls.push(args);
+    return { ok: true, stdout: JSON.stringify({ data: { resource: { commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [checkRun('lint', 'ci', 5, 'COMPLETED', 'SUCCESS')] } } } }] } } } }), stderr: '' };
+  } });
+  assert.deepEqual((await ok.checks('https://github.com/acme/app/pull/1')).map(group => group.name), ['ci #5']);
+  assert.ok(calls[0].includes('url=https://github.com/acme/app/pull/1'));
+  const broken = new PrStore({ run: async () => fail('gh: HTTP 502') });
+  await assert.rejects(broken.checks('https://github.com/acme/app/pull/1'), /HTTP 502/);
 });
 
 test('normalizePr maps state, draft, checks and strips control characters', () => {

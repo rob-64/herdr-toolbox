@@ -15,8 +15,92 @@ const PR_FIELDS = `... on PullRequest {
   author { login }
   reviewDecision
   comments { totalCount }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 0) {
+    totalCount checkRunCountsByState { state count } statusContextCountsByState { state count }
+  } } } } }
 }`;
+
+// Last-commit checks of one PR, for the drill-down: GitHub Actions jobs, other apps' check runs, commit statuses.
+const CHECKS_QUERY = `query($url: URI!) { resource(url: $url) { ... on PullRequest {
+  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
+    __typename
+    ... on CheckRun {
+      name status conclusion startedAt completedAt detailsUrl
+      checkSuite { app { name } workflowRun { runNumber url workflow { name } } }
+    }
+    ... on StatusContext { context state targetUrl description createdAt }
+  } } } } } }
+} } }`;
+
+// Check-run states/conclusions and commit-status states, folded into what the board shows.
+const CHECK_STATE = {
+  SUCCESS: 'success', COMPLETED: 'success',
+  NEUTRAL: 'skipped', SKIPPED: 'skipped', STALE: 'skipped',
+  FAILURE: 'failure', ERROR: 'failure', TIMED_OUT: 'failure', ACTION_REQUIRED: 'failure', STARTUP_FAILURE: 'failure',
+  CANCELLED: 'cancelled',
+  PENDING: 'pending', EXPECTED: 'pending', QUEUED: 'pending', IN_PROGRESS: 'pending', WAITING: 'pending', REQUESTED: 'pending',
+};
+
+export const checkState = value => CHECK_STATE[value] ?? 'pending';
+
+/** Passed / failed / pending out of the checks that matter (skipped and neutral ones are left out). */
+export function ciCounts(contexts) {
+  if (!contexts) return undefined;
+  const counts = { success: 0, failure: 0, cancelled: 0, pending: 0, skipped: 0 };
+  for (const { state, count } of [...(contexts.checkRunCountsByState ?? []), ...(contexts.statusContextCountsByState ?? [])]) {
+    counts[checkState(state)] += count;
+  }
+  const failed = counts.failure + counts.cancelled;
+  return { passed: counts.success, failed, pending: counts.pending, relevant: counts.success + failed + counts.pending };
+}
+
+const STATE_RANK = ['failure', 'pending', 'cancelled', 'success', 'skipped'];
+
+export function rollupState(states) {
+  if (!states.length) return 'skipped';
+  return STATE_RANK.find(state => states.includes(state)) ?? 'pending';
+}
+
+/** Group check contexts: one group per workflow run (jobs inside), per other check app, and one for commit statuses. */
+export function normalizeChecks(nodes) {
+  const groups = new Map();
+  const group = (key, init) => {
+    if (!groups.has(key)) groups.set(key, { key, ...init, jobs: [] });
+    return groups.get(key);
+  };
+  for (const node of nodes ?? []) {
+    if (node?.__typename === 'CheckRun') {
+      const run = node.checkSuite?.workflowRun;
+      const target = run
+        ? group(`run:${run.url ?? run.workflow?.name}`, { kind: 'workflow', name: `${clean(run.workflow?.name) || 'workflow'} #${run.runNumber}`, url: run.url })
+        : group(`app:${node.checkSuite?.app?.name}`, { kind: 'app', name: clean(node.checkSuite?.app?.name) || 'checks', url: undefined });
+      target.jobs.push({
+        name: clean(node.name),
+        state: checkState(node.status === 'COMPLETED' ? node.conclusion : node.status),
+        url: node.detailsUrl ?? undefined,
+        startedAt: Date.parse(node.startedAt) || undefined,
+        completedAt: Date.parse(node.completedAt) || undefined,
+      });
+    } else if (node?.__typename === 'StatusContext') {
+      group('statuses', { kind: 'status', name: 'Commit statuses', url: undefined }).jobs.push({
+        name: clean(node.context),
+        state: checkState(node.state),
+        url: node.targetUrl ?? undefined,
+        description: clean(node.description),
+      });
+    }
+  }
+  const list = [...groups.values()];
+  for (const item of list) {
+    item.state = rollupState(item.jobs.map(job => job.state));
+    const starts = item.jobs.map(job => job.startedAt).filter(Boolean);
+    const ends = item.jobs.map(job => job.completedAt).filter(Boolean);
+    item.startedAt = starts.length ? Math.min(...starts) : undefined;
+    item.completedAt = item.state !== 'pending' && ends.length ? Math.max(...ends) : undefined;
+  }
+  // Failing and running groups first; jobs keep GitHub's order, which follows the workflow.
+  return list.sort((a, b) => STATE_RANK.indexOf(a.state) - STATE_RANK.indexOf(b.state));
+}
 
 const clean = value => String(value ?? '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x1f\x7f-\x9f]/g, ' ').trim();
 
@@ -63,6 +147,7 @@ export function normalizePr(raw) {
     state,
     review: raw.reviewDecision ?? undefined,
     checks: raw.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? undefined,
+    ci: ciCounts(raw.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts),
     comments: raw.comments?.totalCount ?? 0,
     createdAt: Date.parse(raw.createdAt) || undefined,
     updatedAt: Date.parse(raw.updatedAt) || undefined,
@@ -215,5 +300,11 @@ export class PrStore {
     const committed = await attempt('commits', () => committedPrs(this.run, branches, commits), []);
     const prs = mergePrs([...searched, { role: 'committed', nodes: committed }], login);
     return { login, prs, errors, fetchedAt: this.now() };
+  }
+
+  /** Grouped checks of one PR's last commit; throws on a gh failure. */
+  async checks(url) {
+    const data = await graphql(this.run, CHECKS_QUERY, { url });
+    return normalizeChecks(data.resource?.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes);
   }
 }

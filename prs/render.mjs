@@ -23,6 +23,11 @@ const CHECKS = {
   PENDING: ['●', '33'], EXPECTED: ['●', '33'],
 };
 
+// Glyphs for one check (job, status) or a group of them; states come from data.mjs checkState().
+export const CHECK_GLYPH = {
+  success: ['✔', '32'], failure: ['✖', '31'], pending: ['●', '33'], cancelled: ['⊘', '90'], skipped: ['↷', '90'],
+};
+
 const REVIEW = {
   APPROVED: ['approved', '32'],
   CHANGES_REQUESTED: ['changes', '31'],
@@ -46,35 +51,89 @@ function roleSegs(roles) {
   return ROLE_BADGES.map(([role, letter, color]) => (roles.has(role) ? seg(letter, color) : seg('·', '90')));
 }
 
-function prRow(pr, data, now, columns) {
+const CI_WIDTH = 7;
+
+/** "✔ 6/6": passed out of the checks that matter; the glyph says whether any failed or are still running. */
+export function ciText(pr) {
+  const ci = pr.ci;
+  if (!ci?.relevant) {
+    const [glyph, color] = CHECKS[pr.checks] ?? [' ', ''];
+    return seg(fit(glyph, CI_WIDTH), color);
+  }
+  const [glyph, color] = ci.failed ? CHECK_GLYPH.failure : ci.pending ? CHECK_GLYPH.pending : CHECK_GLYPH.success;
+  return seg(fit(`${glyph} ${ci.passed}/${ci.relevant}`, CI_WIDTH), color);
+}
+
+export const hasChecks = pr => Boolean(pr.checks || pr.ci?.relevant);
+
+function prRow(pr, data, ui, now, columns) {
   const [glyph, color] = STATE[pr.state] ?? ['?', '90'];
   const number = `#${pr.number}`;
   const author = !pr.author ? '' : pr.author === data.login ? 'you' : pr.author;
-  const [checkGlyph, checkColor] = CHECKS[pr.checks] ?? [' ', ''];
   // "review required" is noise once a PR is merged or closed; approved / changes requested stay informative.
   const pendingReview = pr.review === 'REVIEW_REQUIRED' && (pr.state === 'merged' || pr.state === 'closed');
   const [review, reviewColor] = pendingReview ? ['', ''] : REVIEW[pr.review] ?? ['', ''];
   const age = ago(now, pr.updatedAt);
-  // prefix: "  ● #1234  " · suffix: " OC✎R  author  ✔ approved  12d"
+  const foldable = hasChecks(pr);
+  const marker = !foldable ? ' ' : ui.expanded?.has(pr.url) ? '▾' : '▸';
+  // prefix: " ▸ ● #1234 " · suffix: " OC✎R  author  ✔ 12/12 approved  12d"
   const numberWidth = 6;
   const authorWidth = Math.min(18, Math.max(3, Math.floor(columns / 8)));
-  const prefix = 4 + numberWidth + 1;
-  const suffix = 1 + 4 + 2 + authorWidth + 2 + 1 + 1 + 8 + 2 + 4;
+  const prefix = 5 + numberWidth + 1;
+  const suffix = 1 + 4 + 2 + authorWidth + 2 + CI_WIDTH + 1 + 8 + 2 + 4;
   const titleWidth = Math.max(8, columns - prefix - suffix);
   return {
     key: pr.url,
     target: { url: pr.url },
+    foldable,
     segments: [
-      seg('  '), seg(glyph, color), seg(' '),
+      seg(' '), seg(marker, '90'), seg(' '), seg(glyph, color), seg(' '),
       seg(fit(number, numberWidth), color), seg(' '),
       seg(fit(pr.title, titleWidth), pr.state === 'merged' || pr.state === 'closed' ? '90' : ''),
       seg(' '), ...roleSegs(pr.roles), seg('  '),
       seg(fit(author, authorWidth), author === 'you' ? '36' : '90'), seg('  '),
-      seg(checkGlyph, checkColor), seg(' '),
+      ciText(pr), seg(' '),
       seg(fit(review, 8), reviewColor), seg('  '),
       seg(fit(age, 4, 'right'), '90'),
     ],
   };
+}
+
+function took(item, now) {
+  if (!item.startedAt) return '';
+  const end = item.completedAt ?? (item.state === 'pending' ? now : undefined);
+  return end ? duration(Math.max(0, end - item.startedAt)) : '';
+}
+
+/** Rows under an expanded PR: one per check group, its jobs beneath, skipped jobs folded into one summary row. */
+export function checkRows(pr, entry, now, columns) {
+  const parentKey = pr.url;
+  const note = (text, style) => [{ key: `${pr.url}#note`, parentKey, target: {}, segments: [seg('      '), seg(text, style)] }];
+  if (!entry || (entry.loading && !entry.groups)) return note('⟳ loading checks…', '90');
+  if (entry.error && !entry.groups) return note(`⚠ ${entry.error}`, '31');
+  if (!entry.groups.length) return note('no checks on the last commit', '90');
+  const rows = [];
+  const line = (key, target, indent, state, name, nameStyle, middle, right) => {
+    const [glyph, color] = CHECK_GLYPH[state] ?? CHECK_GLYPH.pending;
+    const nameWidth = Math.max(8, columns - indent - 2 - 1 - 12 - 1 - 8);
+    rows.push({
+      key, parentKey, target,
+      segments: [seg(' '.repeat(indent)), seg(glyph, color), seg(' '), seg(fit(name, nameWidth), nameStyle), seg(' '), seg(fit(middle, 12), '90'), seg(' '), seg(fit(right, 8, 'right'), '90')],
+    });
+  };
+  for (const group of entry.groups) {
+    const failed = group.jobs.filter(job => job.state === 'failure' || job.state === 'cancelled').length;
+    const unit = group.kind === 'status' ? ['status', 'statuses'] : ['job', 'jobs'];
+    const count = `${group.jobs.length} ${unit[group.jobs.length === 1 ? 0 : 1]}`;
+    line(`${pr.url}#${group.key}`, { url: group.url }, 6, group.state, group.name, '1', failed ? `${failed} failed` : count, took(group, now));
+    const skipped = group.jobs.filter(job => job.state === 'skipped');
+    group.jobs.forEach((job, index) => {
+      if (job.state === 'skipped') return;
+      line(`${pr.url}#${group.key}#${index}`, { url: job.url }, 8, job.state, job.name, '', job.description ?? '', took(job, now));
+    });
+    if (skipped.length) line(`${pr.url}#${group.key}#skipped`, {}, 8, 'skipped', `${skipped.length} skipped: ${skipped.map(job => job.name).join(', ')}`, '90', '', '');
+  }
+  return rows;
 }
 
 /** Rows grouped by repository; repos ordered by their most recently updated PR. */
@@ -92,7 +151,10 @@ export function buildRows(data, ui, now, columns) {
   for (const [repo, list] of groups) {
     const open = list.filter(pr => pr.state === 'open' || pr.state === 'draft').length;
     rows.push({ segments: [seg('▍', '35'), seg(repo, '1'), seg(`  ${list.length} PR${list.length === 1 ? '' : 's'}${open && open !== list.length ? ` · ${open} open` : ''}`, '90')] });
-    for (const pr of list) rows.push(prRow(pr, data, now, columns));
+    for (const pr of list) {
+      rows.push(prRow(pr, data, ui, now, columns));
+      if (ui.expanded?.has(pr.url) && hasChecks(pr)) rows.push(...checkRows(pr, ui.checks?.get(pr.url), now, columns));
+    }
   }
   return { rows, count: prs.length };
 }
@@ -121,7 +183,7 @@ export function header(data, ui, view, now, columns) {
   return [[...left, seg(' '.repeat(gap)), ...right], [seg('─'.repeat(columns), '90')]];
 }
 
-export const HINTS = 'click select · click again/⏎ open in browser  f filter  m role  t timer  r refresh  j/k  q quit   O opened C committed ✎ commented R reviewed';
+export const HINTS = 'click select · click again/⏎ open  l/→ checks  h/← back  f filter  m role  t timer  r refresh  j/k  q quit   O opened C committed ✎ commented R reviewed';
 
 export function footer(selected, data, columns, message) {
   const detail = message
