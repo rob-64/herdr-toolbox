@@ -12,10 +12,8 @@ function debug(...parts) {
 	} catch {}
 }
 
-// Guard keys keep the pre-rename herdr-omo-toolbox names: if an old copy of this extension is still
-// installed beside the new one, they share the guard and only one status reporter runs.
-const GLOBAL_KEY = Symbol.for("herdr-omo-toolbox.status.v1");
-const OWNER_ENV = "HERDR_OMO_TOOLBOX_STATUS_OWNER";
+const GLOBAL_KEY = Symbol.for("herdr-toolbox.status.v1");
+const OWNER_ENV = "HERDR_TOOLBOX_STATUS_OWNER";
 
 export function readEnvironment(env) {
 	if (env.HERDR_ENV !== "1") return undefined;

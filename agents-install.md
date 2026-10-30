@@ -26,9 +26,6 @@ turn them off (step 5).
 herdr plugin install rob-64/herdr-toolbox --yes
 ```
 
-If `herdr plugin list` shows the old `herdr-omo-toolbox` plugin, follow "Upgrading from herdr-omo-toolbox"
-in the README instead: it keeps the user's config and swaps the extension files.
-
 Verify:
 
 ```sh
@@ -78,7 +75,6 @@ extension and ask before removing it with `omo remove npm:omo-herdr`.
 root=$(herdr plugin list --json --plugin herdr-toolbox | jq -r '.result.plugins[0].plugin_root')
 mkdir -p ~/.omo/agent/extensions
 cp "$root"/omo_extensions/*.js ~/.omo/agent/extensions/
-rm -f ~/.omo/agent/extensions/herdr-omo-agents.js   # old extension; opens a plugin that no longer exists
 ```
 
 If `jq` is not installed, copy the `plugin_root` path from step 2 by hand, or

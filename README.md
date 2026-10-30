@@ -8,12 +8,6 @@ A [herdr](https://herdr.dev) plugin: a GitHub PR board, automatic tab titles wit
 herdr plugin install rob-64/herdr-toolbox
 ```
 
-This replaces the older `herdr-omo-toolbox` and `herdr-omo-agents` plugins. See [Upgrading from herdr-omo-toolbox](#upgrading-from-herdr-omo-toolbox) if you had the first; uninstall the second if you had it:
-
-```sh
-herdr plugin uninstall herdr-omo-agents
-```
-
 It needs `bun` or `node` 18+ on `PATH`. Nothing is built or downloaded.
 
 ### Without OmO
@@ -138,8 +132,6 @@ Install it, then start a new OmO session or run `/reload`:
 ```sh
 cp omo_extensions/herdr-toolbox.js ~/.omo/agent/extensions/herdr-toolbox.js
 ```
-
-Remove the old `herdr-omo-agents.js` extension if you had it installed.
 
 ### Keys
 
@@ -347,22 +339,3 @@ This plugin's description includes **Automatic tab titles**, so **herdr-bar** de
 - `bin/pr-board` — launcher for the PR board
 - `bin/tabs` — launcher for the tab watcher and actions
 - `scripts/check-runtime.sh` — plugin build check (bun or node 18+)
-
-## Upgrading from herdr-omo-toolbox
-
-The plugin was renamed from `herdr-omo-toolbox` to `herdr-toolbox`. Action ids (`herdr-toolbox.open-prs`, ...), the plugin config dir, and the OmO extension file names changed with it.
-
-```sh
-# keep your tab-title config, if you had one
-old=$(herdr plugin config-dir herdr-omo-toolbox); [ -f "$old/config.json" ] && cp "$old/config.json" /tmp/herdr-toolbox-config.json
-herdr plugin action invoke herdr-omo-toolbox.tabs-stop   # strip icons/status from tabs the old watcher named
-herdr plugin uninstall herdr-omo-toolbox
-herdr plugin install rob-64/herdr-toolbox
-[ -f /tmp/herdr-toolbox-config.json ] && mkdir -p "$(herdr plugin config-dir herdr-toolbox)" && mv /tmp/herdr-toolbox-config.json "$(herdr plugin config-dir herdr-toolbox)/config.json"
-
-# OmO users: swap the extension files, then /reload open OmO sessions
-rm -f ~/.omo/agent/extensions/herdr-omo-toolbox.js ~/.omo/agent/extensions/herdr-omo-toolbox-status.js
-cp "$(herdr plugin list --json --plugin herdr-toolbox | jq -r '.result.plugins[0].plugin_root')"/omo_extensions/*.js ~/.omo/agent/extensions/
-```
-
-Then change `herdr-omo-toolbox.` to `herdr-toolbox.` in any keybindings in `~/.config/herdr/config.toml` and run `herdr server reload-config`.

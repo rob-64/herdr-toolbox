@@ -145,7 +145,7 @@ test('Viewer tool line uses single space between name and summary', () => {
     timestamp: '2026-10-29T12:00:00.000Z',
     message: {
       role: 'assistant',
-      content: [{ type: 'toolCall', id: 'c1', name: 'read', arguments: { file_path: '/Users/me/w/herdr-omo-toolbox/.github/workflows/ci.yml' } }],
+      content: [{ type: 'toolCall', id: 'c1', name: 'read', arguments: { file_path: '/Users/me/w/herdr-toolbox/.github/workflows/ci.yml' } }],
     },
   };
   writeFileSync(file, `${JSON.stringify(readCall)}\n`);

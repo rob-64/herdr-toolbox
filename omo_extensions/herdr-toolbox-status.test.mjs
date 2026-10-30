@@ -234,11 +234,11 @@ describe("session lifecycle", () => {
 	async function withEnv(fn) {
 		const saved = { ...process.env };
 		Object.assign(process.env, ENV);
-		delete process.env.HERDR_OMO_TOOLBOX_STATUS_OWNER;
-		delete globalThis[Symbol.for("herdr-omo-toolbox.status.v1")];
+		delete process.env.HERDR_TOOLBOX_STATUS_OWNER;
+		delete globalThis[Symbol.for("herdr-toolbox.status.v1")];
 		try { await fn(); } finally {
 			process.env = saved;
-			delete globalThis[Symbol.for("herdr-omo-toolbox.status.v1")];
+			delete globalThis[Symbol.for("herdr-toolbox.status.v1")];
 		}
 	}
 
