@@ -115,6 +115,12 @@ key = "prefix+t"
 type = "plugin_action"
 command = "herdr-omo-toolbox.open-tasks"
 description = "OmO tasks board"
+
+[[keys.command]]
+key = "prefix+g"
+type = "plugin_action"
+command = "herdr-omo-toolbox.open-prs"
+description = "GitHub PR board"
 ```
 
 If the user agrees, append them, check for conflicts, and reload:

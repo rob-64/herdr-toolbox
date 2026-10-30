@@ -1,6 +1,6 @@
 # herdr-omo-toolbox
 
-A [herdr](https://herdr.dev) plugin for running [OmO](https://github.com/code-yeongyu/oh-my-openagent) in herdr: live agents and tasks boards, automatic tab titles with agent icons, status glyphs, and MRU alt-tab.
+A [herdr](https://herdr.dev) plugin for running [OmO](https://github.com/code-yeongyu/oh-my-openagent) in herdr: live agents, tasks, and GitHub PR boards, automatic tab titles with agent icons, status glyphs, and MRU alt-tab.
 
 ## Install
 
@@ -185,6 +185,59 @@ bin/agents-board --json --scope session --session-pane w11:p1
 bin/agents-board --json --view tasks
 ```
 
+## PR board
+
+Lists every GitHub pull request you opened, committed to, commented on, or reviewed, grouped by repository and refreshed every minute. It uses the `gh` CLI, so it needs `gh` on `PATH` and `gh auth login` done.
+
+```
+ GitHub PRs  @octocat   filter:open   role:any                            ●9 4s ago
+────────────────────────────────────────────────────────────────────────────────────
+▍acme/helm-charts  2 PRs
+  ● #31    ci: open image bump pull requests from the newest ECR…  ··✎R  alice  ✔ review   40m
+  ● #32    ci: check that images exist in ECR and add a CI gate      O···  you    ✔ review    2h
+▍acme/connector-service  1 PR
+  ● #1     ci: build and release with GitHub Actions                  OC✎R  you    ✖ review   46h
+```
+
+The role column shows how you're involved: `O` opened, `C` committed, `✎` commented, `R` reviewed. State is `●` open, `○` draft, `◆` merged, `✖` closed; then the author, the CI checks (`✔` `✖` `●`), the review decision, and the time since the last update.
+
+Where the PRs come from:
+
+- **Opened, commented, reviewed**: GitHub search (`author:`, `commenter:`, `reviewed-by:`), up to 50 most recently updated PRs each.
+- **Committed**: branches you pushed to (your GitHub push events, the last 90 days) matched to PRs by head branch, plus PRs containing commits you authored that landed on a default branch (commit search; skipped for the `open` filter). Commits on someone else's branch older than 90 days are only found once the PR is merged with a merge or rebase commit.
+
+### Open it
+
+| Action | What it does |
+| --- | --- |
+| `herdr-omo-toolbox.open-prs` | Popup over the current pane (closes after opening a PR) |
+| `herdr-omo-toolbox.open-prs-split` | Split to the right of the current pane |
+| `herdr-omo-toolbox.open-prs-tab` | Its own tab |
+
+### Keys
+
+| Key | Action |
+| --- | --- |
+| `j` `k` / ↑ ↓ / wheel | Move selection |
+| `Enter` / `o` / click again | Open the PR in the browser (`gh pr view --web`) |
+| `f` | Cycle filter: `open` → `recent` (updated in the last 30 days) → `all` |
+| `m` | Cycle role: `any` → `opened` → `committed` → `commented` (includes reviewed) |
+| `r` | Refresh now |
+| `g` / `G` | Top / bottom |
+| `q` / `Esc` | Close |
+
+Click `filter:` or `role:` in the header to cycle them.
+
+### CLI
+
+```sh
+bin/pr-board --once --filter all --width 140
+bin/pr-board --once --role committed
+bin/pr-board --json --filter recent
+```
+
+Set `GH_BIN` to use a different `gh` binary.
+
 ## Agent status
 
 When OmO runs inside a herdr pane, `omo_extensions/herdr-omo-toolbox-status.js` reports agent state back to herdr so the agent list shows whether OmO is idle, working, or blocked. **Background subagent tasks** (`running` or `pending`) count as **working**, so the spinner keeps going while OmO waits on subagents.
@@ -260,9 +313,11 @@ This plugin's description includes **Automatic tab titles**, so **herdr-bar** de
 ## Layout
 
 - `board/` — live agents and tasks board (`main.mjs`, data/render)
+- `prs/` — GitHub PR board (`main.mjs`, data over `gh`, render)
 - `omo_extensions/` — OmO extensions: `/agents-board`, `/rename-tab`, and agent status
 - `tabs/` — automatic tab titles, icons, MRU state, and tests
 - `bin/agents-board` — launcher for the board
+- `bin/pr-board` — launcher for the PR board
 - `bin/tabs` — launcher for the tab watcher and actions
 - `scripts/check-runtime.sh` — plugin build check (bun or node 18+)
 

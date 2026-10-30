@@ -2,7 +2,7 @@ id = "herdr-omo-toolbox"
 name = "OmO Toolbox"
 version = "0.3.0"
 min_herdr_version = "0.9.0"
-description = "OmO toolbox: live agents and tasks boards, automatic tab titles with agent icons and status, and alt-tab to the last tab"
+description = "OmO toolbox: live agents, tasks and GitHub PR boards, automatic tab titles with agent icons and status, and alt-tab to the last tab"
 platforms = ["linux", "macos"]
 
 [[build]]
@@ -67,6 +67,43 @@ title = "OmO Tasks (tab)"
 description = "Open the OmO tasks board in its own tab"
 contexts = ["global", "workspace"]
 command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "side", "--placement", "tab", "--focus", "--env", "OMO_BOARD_VIEW=tasks"]
+
+[[panes]]
+id = "prs"
+title = "GitHub PRs"
+description = "GitHub PRs you opened, committed to, or commented on"
+placement = "popup"
+width = "92%"
+height = "88%"
+command = ["/bin/sh", "-c", "exec \"${HERDR_PLUGIN_ROOT:?not launched by herdr}/bin/pr-board\""]
+
+[[panes]]
+id = "prs-side"
+title = "GitHub PRs"
+description = "GitHub PRs you opened, committed to, or commented on"
+placement = "split"
+command = ["/bin/sh", "-c", "exec \"${HERDR_PLUGIN_ROOT:?not launched by herdr}/bin/pr-board\""]
+
+[[actions]]
+id = "open-prs"
+title = "GitHub PRs"
+description = "Open the GitHub PR board as a popup"
+contexts = ["global", "workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "prs", "--focus"]
+
+[[actions]]
+id = "open-prs-split"
+title = "GitHub PRs (split)"
+description = "Open the GitHub PR board in a split to the right"
+contexts = ["global", "workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "prs-side", "--placement", "split", "--direction", "right", "--no-focus"]
+
+[[actions]]
+id = "open-prs-tab"
+title = "GitHub PRs (tab)"
+description = "Open the GitHub PR board in its own tab"
+contexts = ["global", "workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "prs-side", "--placement", "tab", "--focus"]
 
 [[startup]]
 command = ["bin/tabs", "ensure"]
