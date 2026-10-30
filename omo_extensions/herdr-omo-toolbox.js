@@ -2,13 +2,21 @@ import { execFile } from "node:child_process";
 
 const PLUGIN = "herdr-omo-toolbox";
 
+// herdr entrypoints per board: `popup` floats, `pane` is placed by the mode (split/overlay/zoomed/tab).
+const BOARDS = {
+	"agents-board": { title: "OmO Agents board", popup: "board", pane: "side", env: ["--env", "OMO_BOARD_VIEW=agents"] },
+	"pr-board": { title: "GitHub PR board", popup: "prs", pane: "prs-side", env: [] },
+};
+
+const AGENTS = BOARDS["agents-board"];
+
 const MODES = [
-	{ name: "split", short: "s", help: "split to the right, keep focus here (default)", args: (pane) => ["--entrypoint", "side", "--placement", "split", "--direction", "right", "--target-pane", pane, "--no-focus"] },
-	{ name: "split-down", short: "sd", help: "split below, keep focus here", args: (pane) => ["--entrypoint", "side", "--placement", "split", "--direction", "down", "--target-pane", pane, "--no-focus"] },
-	{ name: "overlay", short: "o", help: "zoom over this pane until you press q", args: () => ["--entrypoint", "side", "--placement", "overlay", "--focus"] },
-	{ name: "popup", short: "p", help: "floating window over everything", args: () => ["--entrypoint", "board", "--focus"] },
-	{ name: "zoomed", short: "z", help: "new pane, zoomed to fill the tab", args: (pane) => ["--entrypoint", "side", "--placement", "zoomed", "--target-pane", pane, "--focus"] },
-	{ name: "tab", short: "t", help: "its own tab", args: () => ["--entrypoint", "side", "--placement", "tab", "--focus"] },
+	{ name: "split", short: "s", help: "split to the right, keep focus here (default)", args: (pane, board = AGENTS) => ["--entrypoint", board.pane, "--placement", "split", "--direction", "right", "--target-pane", pane, "--no-focus"] },
+	{ name: "split-down", short: "sd", help: "split below, keep focus here", args: (pane, board = AGENTS) => ["--entrypoint", board.pane, "--placement", "split", "--direction", "down", "--target-pane", pane, "--no-focus"] },
+	{ name: "overlay", short: "o", help: "zoom over this pane until you press q", args: (pane, board = AGENTS) => ["--entrypoint", board.pane, "--placement", "overlay", "--focus"] },
+	{ name: "popup", short: "p", help: "floating window over everything", args: (pane, board = AGENTS) => ["--entrypoint", board.popup, "--focus"] },
+	{ name: "zoomed", short: "z", help: "new pane, zoomed to fill the tab", args: (pane, board = AGENTS) => ["--entrypoint", board.pane, "--placement", "zoomed", "--target-pane", pane, "--focus"] },
+	{ name: "tab", short: "t", help: "its own tab", args: (pane, board = AGENTS) => ["--entrypoint", board.pane, "--placement", "tab", "--focus"] },
 ];
 
 const MODE_HELP_WIDTH = Math.max(...MODES.map((mode) => `${mode.name} (${mode.short})`.length), "help".length);
@@ -39,9 +47,9 @@ export function getModeArgumentCompletions(prefix) {
 	return items.length ? items : null;
 }
 
-export function boardHelp() {
+export function boardHelp(command = "agents-board") {
 	return [
-		"/agents-board [mode]",
+		`/${command} [mode]`,
 		...MODES.map((mode) => `  ${modeLabel(mode).padEnd(MODE_HELP_WIDTH)} ${mode.help}`),
 		`  ${"help".padEnd(MODE_HELP_WIDTH)} show this help`,
 	].join("\n");
@@ -55,40 +63,35 @@ function herdr(args) {
 	});
 }
 
-export default function (pi) {
-	pi.registerCommand("agents-board", {
-		description: `Open the OmO Agents board: /agents-board [${MODES.map((mode) => modeLabel(mode)).join("|")}|help]`,
+function registerBoard(pi, command, board) {
+	pi.registerCommand(command, {
+		description: `Open the ${board.title}: /${command} [${MODES.map((mode) => modeLabel(mode)).join("|")}|help]`,
 		getArgumentCompletions: getModeArgumentCompletions,
 		handler: async (args, ctx) => {
 			const modeName = String(args ?? "").trim() || "split";
 			const resolved = resolveMode(args);
 			if (resolved === HELP) {
-				ctx.ui.notify(boardHelp(), "info");
+				ctx.ui.notify(boardHelp(command), "info");
 				return;
 			}
 			const mode = resolved;
 			if (!mode) {
-				ctx.ui.notify(`/agents-board: unknown mode "${modeName}"\n${boardHelp()}`, "error");
+				ctx.ui.notify(`/${command}: unknown mode "${modeName}"\n${boardHelp(command)}`, "error");
 				return;
 			}
 			const pane = process.env.HERDR_PANE_ID;
 			if (!pane) {
-				ctx.ui.notify("/agents-board only works inside a herdr pane", "error");
+				ctx.ui.notify(`/${command} only works inside a herdr pane`, "error");
 				return;
 			}
-			const { error, output } = await herdr([
-				"plugin",
-				"pane",
-				"open",
-				"--plugin",
-				PLUGIN,
-				"--env",
-				"OMO_BOARD_VIEW=agents",
-				...mode.args(pane),
-			]);
-			if (error) ctx.ui.notify(`/agents-board: ${output || error.message}`, "error");
+			const { error, output } = await herdr(["plugin", "pane", "open", "--plugin", PLUGIN, ...board.env, ...mode.args(pane, board)]);
+			if (error) ctx.ui.notify(`/${command}: ${output || error.message}`, "error");
 		},
 	});
+}
+
+export default function (pi) {
+	for (const [command, board] of Object.entries(BOARDS)) registerBoard(pi, command, board);
 
 	pi.registerCommand("rename-tab", {
 		description: "Rename the herdr tab this OmO session is in: /rename-tab <name>",

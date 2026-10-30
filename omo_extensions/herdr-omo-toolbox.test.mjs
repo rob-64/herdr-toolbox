@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { boardHelp, getModeArgumentCompletions, resolveMode } from "./herdr-omo-toolbox.js";
 
 const PANE = "w1:p1";
@@ -77,24 +80,40 @@ describe("boardHelp", () => {
 	});
 });
 
-describe("/agents-board handler", () => {
-	async function run(arg) {
-		const commands = {};
-		const { default: register } = await import("./herdr-omo-toolbox.js");
-		register({ registerCommand: (name, def) => { commands[name] = def; } });
-		const saved = { pane: process.env.HERDR_PANE_ID, bin: process.env.HERDR_BIN_PATH };
-		process.env.HERDR_PANE_ID = PANE;
-		process.env.HERDR_BIN_PATH = "/usr/bin/true";
-		const notes = [];
-		try {
-			await commands["agents-board"].handler(arg, { ui: { notify: (message) => notes.push(message) } });
-		} finally {
-			if (saved.pane === undefined) delete process.env.HERDR_PANE_ID; else process.env.HERDR_PANE_ID = saved.pane;
-			if (saved.bin === undefined) delete process.env.HERDR_BIN_PATH; else process.env.HERDR_BIN_PATH = saved.bin;
-		}
-		return notes;
+async function run(arg, { command = "agents-board", bin = "/usr/bin/true" } = {}) {
+	const commands = {};
+	const { default: register } = await import("./herdr-omo-toolbox.js");
+	register({ registerCommand: (name, def) => { commands[name] = def; } });
+	const saved = { pane: process.env.HERDR_PANE_ID, bin: process.env.HERDR_BIN_PATH };
+	process.env.HERDR_PANE_ID = PANE;
+	process.env.HERDR_BIN_PATH = bin;
+	const notes = [];
+	try {
+		await commands[command].handler(arg, { ui: { notify: (message) => notes.push(message) } });
+	} finally {
+		if (saved.pane === undefined) delete process.env.HERDR_PANE_ID; else process.env.HERDR_PANE_ID = saved.pane;
+		if (saved.bin === undefined) delete process.env.HERDR_BIN_PATH; else process.env.HERDR_BIN_PATH = saved.bin;
 	}
+	return notes;
+}
 
+// A fake herdr that fails and prints its argv, so the handler's error note carries the exact args.
+async function herdrArgs(command, arg) {
+	const dir = mkdtempSync(join(tmpdir(), "omo-toolbox-ext-"));
+	const bin = join(dir, "herdr");
+	writeFileSync(bin, "#!/bin/sh\nprintf '%s\\n' \"$@\" >&2\nexit 1\n");
+	chmodSync(bin, 0o755);
+	try {
+		const [note] = await run(arg, { command, bin });
+		return note.slice(`/${command}: `.length).split("\n");
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}
+
+const OPEN = ["plugin", "pane", "open", "--plugin", "herdr-omo-toolbox"];
+
+describe("/agents-board handler", () => {
 	it("opens a board (no help) for a bare command and for every mode", async () => {
 		for (const arg of ["", " ", "s", "split", "sd", "p", "o", "z", "t"]) {
 			assert.deepEqual(await run(arg), [], `arg ${JSON.stringify(arg)}`);
@@ -104,5 +123,25 @@ describe("/agents-board handler", () => {
 	it("shows help only when asked", async () => {
 		const [note] = await run("h");
 		assert.match(note, /^\/agents-board \[mode\]/);
+	});
+
+	it("opens the agents view in the agents entrypoints", async () => {
+		assert.deepEqual(await herdrArgs("agents-board", "p"), [...OPEN, "--env", "OMO_BOARD_VIEW=agents", "--entrypoint", "board", "--focus"]);
+		assert.deepEqual((await herdrArgs("agents-board", "")).slice(5, 9), ["--env", "OMO_BOARD_VIEW=agents", "--entrypoint", "side"]);
+	});
+});
+
+describe("/pr-board handler", () => {
+	it("opens the PR board entrypoints for every mode", async () => {
+		assert.deepEqual(await herdrArgs("pr-board", "p"), [...OPEN, "--entrypoint", "prs", "--focus"]);
+		assert.deepEqual(await herdrArgs("pr-board", ""), [...OPEN, "--entrypoint", "prs-side", "--placement", "split", "--direction", "right", "--target-pane", PANE, "--no-focus"]);
+		for (const arg of ["sd", "o", "z", "t"]) assert.deepEqual((await herdrArgs("pr-board", arg)).slice(5, 7), ["--entrypoint", "prs-side"], arg);
+	});
+
+	it("shows its own help and rejects unknown modes", async () => {
+		const [help] = await run("h", { command: "pr-board" });
+		assert.match(help, /^\/pr-board \[mode\]\n {2}split \(s\)/);
+		const [unknown] = await run("nope", { command: "pr-board" });
+		assert.match(unknown, /^\/pr-board: unknown mode "nope"/);
 	});
 });

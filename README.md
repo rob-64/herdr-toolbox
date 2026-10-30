@@ -105,7 +105,7 @@ Todo data is read incrementally from OmO session transcripts: main sessions unde
 
 ### OmO extension
 
-`omo_extensions/herdr-omo-toolbox.js` is an OmO extension that adds `/agents-board [mode]` (with tab completion for the mode) and `/rename-tab <name>`:
+`omo_extensions/herdr-omo-toolbox.js` is an OmO extension that adds `/agents-board [mode]` and `/pr-board [mode]` (with tab completion for the mode) and `/rename-tab <name>`. Both board commands take the same modes:
 
 | Mode | Short | Opens |
 | --- | --- | --- |
@@ -213,6 +213,8 @@ Where the PRs come from:
 | `herdr-omo-toolbox.open-prs` | Popup over the current pane (closes after opening a PR) |
 | `herdr-omo-toolbox.open-prs-split` | Split to the right of the current pane |
 | `herdr-omo-toolbox.open-prs-tab` | Its own tab |
+
+Or from OmO: `/pr-board [mode]`, with the same modes as `/agents-board`.
 
 ### Keys
 
