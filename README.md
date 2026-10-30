@@ -107,15 +107,15 @@ Todo data is read incrementally from OmO session transcripts: main sessions unde
 
 `omo_extensions/herdr-omo-toolbox.js` is an OmO extension that adds `/agents-board [mode]` (with tab completion for the mode) and `/rename-tab <name>`:
 
-| Mode | Opens |
-| --- | --- |
-| `split` (default) | Split to the right, focus stays in OmO |
-| `split-down` | Split below, focus stays in OmO |
-| `overlay` | Zoomed over the current pane until you press `q` |
-| `popup` | Floating window over everything |
-| `zoomed` | New pane, zoomed to fill the tab |
-| `tab` | Its own tab |
-| `help` | Lists the modes |
+| Mode | Short | Opens |
+| --- | --- | --- |
+| `split` (default) | `s` | Split to the right, focus stays in OmO |
+| `split-down` | `sd` | Split below, focus stays in OmO |
+| `overlay` | `o` | Zoomed over the current pane until you press `q` |
+| `popup` | `p` | Floating window over everything |
+| `zoomed` | `z` | New pane, zoomed to fill the tab |
+| `tab` | `t` | Its own tab |
+| `help` | `h` | Lists the modes |
 
 `/rename-tab <name>` renames the herdr tab this OmO session is in. After that, the tab watcher leaves that tab alone and stops auto-renaming it.
 

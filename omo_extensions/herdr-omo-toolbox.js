@@ -3,19 +3,47 @@ import { execFile } from "node:child_process";
 const PLUGIN = "herdr-omo-toolbox";
 
 const MODES = [
-	{ name: "split", help: "split to the right, keep focus here (default)", args: (pane) => ["--entrypoint", "side", "--placement", "split", "--direction", "right", "--target-pane", pane, "--no-focus"] },
-	{ name: "split-down", help: "split below, keep focus here", args: (pane) => ["--entrypoint", "side", "--placement", "split", "--direction", "down", "--target-pane", pane, "--no-focus"] },
-	{ name: "overlay", help: "zoom over this pane until you press q", args: () => ["--entrypoint", "side", "--placement", "overlay", "--focus"] },
-	{ name: "popup", help: "floating window over everything", args: () => ["--entrypoint", "board", "--focus"] },
-	{ name: "zoomed", help: "new pane, zoomed to fill the tab", args: (pane) => ["--entrypoint", "side", "--placement", "zoomed", "--target-pane", pane, "--focus"] },
-	{ name: "tab", help: "its own tab", args: () => ["--entrypoint", "side", "--placement", "tab", "--focus"] },
+	{ name: "split", short: "s", help: "split to the right, keep focus here (default)", args: (pane) => ["--entrypoint", "side", "--placement", "split", "--direction", "right", "--target-pane", pane, "--no-focus"] },
+	{ name: "split-down", short: "sd", help: "split below, keep focus here", args: (pane) => ["--entrypoint", "side", "--placement", "split", "--direction", "down", "--target-pane", pane, "--no-focus"] },
+	{ name: "overlay", short: "o", help: "zoom over this pane until you press q", args: () => ["--entrypoint", "side", "--placement", "overlay", "--focus"] },
+	{ name: "popup", short: "p", help: "floating window over everything", args: () => ["--entrypoint", "board", "--focus"] },
+	{ name: "zoomed", short: "z", help: "new pane, zoomed to fill the tab", args: (pane) => ["--entrypoint", "side", "--placement", "zoomed", "--target-pane", pane, "--focus"] },
+	{ name: "tab", short: "t", help: "its own tab", args: () => ["--entrypoint", "side", "--placement", "tab", "--focus"] },
 ];
 
-function boardHelp() {
+const MODE_HELP_WIDTH = Math.max(...MODES.map((mode) => `${mode.name} (${mode.short})`.length), "help".length);
+
+function modeLabel(mode) {
+	return `${mode.name} (${mode.short})`;
+}
+
+export function resolveMode(arg) {
+	const token = String(arg ?? "").trim();
+	const key = (token || "split").toLowerCase();
+	if (["help", "-h", "--help", "?", "h"].includes(key)) return { help: true };
+	return MODES.find((entry) => entry.name.toLowerCase() === key || entry.short.toLowerCase() === key);
+}
+
+export function getModeArgumentCompletions(prefix) {
+	const p = prefix.trim().toLowerCase();
+	const items = [
+		...MODES,
+		{ name: "help", short: "h", help: "show modes" },
+	]
+		.filter((mode) => mode.name.toLowerCase().startsWith(p) || mode.short.toLowerCase().startsWith(p))
+		.map((mode) => ({
+			value: mode.name,
+			label: mode.short ? modeLabel(mode) : mode.name,
+			description: mode.help,
+		}));
+	return items.length ? items : null;
+}
+
+export function boardHelp() {
 	return [
 		"/agents-board [mode]",
-		...MODES.map((mode) => `  ${mode.name.padEnd(10)} ${mode.help}`),
-		"  help       show this help",
+		...MODES.map((mode) => `  ${modeLabel(mode).padEnd(MODE_HELP_WIDTH)} ${mode.help}`),
+		`  ${"help".padEnd(MODE_HELP_WIDTH)} show this help`,
 	].join("\n");
 }
 
@@ -29,20 +57,16 @@ function herdr(args) {
 
 export default function (pi) {
 	pi.registerCommand("agents-board", {
-		description: `Open the OmO Agents board: /agents-board [${MODES.map((mode) => mode.name).join("|")}|help]`,
-		getArgumentCompletions: (prefix) => {
-			const items = [...MODES, { name: "help", help: "show modes" }]
-				.filter((mode) => mode.name.startsWith(prefix.trim()))
-				.map((mode) => ({ value: mode.name, label: mode.name, description: mode.help }));
-			return items.length ? items : null;
-		},
+		description: `Open the OmO Agents board: /agents-board [${MODES.map((mode) => modeLabel(mode)).join("|")}|help]`,
+		getArgumentCompletions: getModeArgumentCompletions,
 		handler: async (args, ctx) => {
 			const modeName = String(args ?? "").trim() || "split";
-			if (["help", "-h", "--help", "?"].includes(modeName)) {
+			const resolved = resolveMode(args);
+			if (resolved?.help) {
 				ctx.ui.notify(boardHelp(), "info");
 				return;
 			}
-			const mode = MODES.find((entry) => entry.name === modeName);
+			const mode = resolved;
 			if (!mode) {
 				ctx.ui.notify(`/agents-board: unknown mode "${modeName}"\n${boardHelp()}`, "error");
 				return;
