@@ -35,7 +35,7 @@ const data = {
   ],
 };
 
-const ui = (extra = {}) => ({ filter: 'all', role: 'any', ...extra });
+const ui = (extra = {}) => ({ filter: 'all', role: 'any', refresh: 120, ...extra });
 const numbers = rows => rows.filter(row => row.key).map(row => Number(row.key.split('/').pop()));
 
 test('filters by state and age', () => {
@@ -82,6 +82,12 @@ test('role badges keep a fixed column', () => {
   assert.match(text(5), /OC✎R/);
   assert.match(text(1), /O··· {2}you/);
   assert.equal(column(1, 'O···'), column(5, 'OC✎R'));
+});
+
+test('header shows clickable filter, role and refresh interval', () => {
+  const [top] = header(data, ui({ refresh: 30 }), undefined, now, 120);
+  const actions = Object.fromEntries(top.filter(part => part.action).map(part => [part.action, part.text]));
+  assert.deepEqual(actions, { filter: 'filter:all', role: 'role:any', refresh: 'refresh:30s' });
 });
 
 test('empty and error states', () => {

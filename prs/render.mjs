@@ -2,6 +2,8 @@ import { duration, fit, seg, width } from '../board/render.mjs';
 
 export const FILTERS = ['open', 'recent', 'all'];
 export const ROLE_FILTERS = ['any', 'opened', 'committed', 'commented'];
+// Seconds between automatic refreshes; 120 is the default.
+export const REFRESH_INTERVALS = [30, 60, 120, 300];
 
 const DAY = 24 * 60 * 60 * 1000;
 const RECENT_MS = 30 * DAY;
@@ -111,13 +113,15 @@ export function header(data, ui, view, now, columns) {
     seg(`filter:${ui.filter}`, '1', 'filter'),
     seg('   '),
     seg(`role:${ui.role}`, '1', 'role'),
+    seg('   '),
+    seg(`refresh:${ui.refresh}s`, '1', 'refresh'),
   ];
   const right = [...stats, seg(status, data.loading ? '33' : '90')];
   const gap = Math.max(1, columns - left.reduce((sum, part) => sum + width(part.text), 0) - right.reduce((sum, part) => sum + width(part.text), 0) - 1);
   return [[...left, seg(' '.repeat(gap)), ...right], [seg('─'.repeat(columns), '90')]];
 }
 
-export const HINTS = 'click select · click again/⏎ open in browser  f filter  m role  r refresh  j/k  q quit   O opened C committed ✎ commented R reviewed';
+export const HINTS = 'click select · click again/⏎ open in browser  f filter  m role  t timer  r refresh  j/k  q quit   O opened C committed ✎ commented R reviewed';
 
 export function footer(selected, data, columns, message) {
   const detail = message

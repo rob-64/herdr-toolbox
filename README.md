@@ -187,10 +187,10 @@ bin/agents-board --json --view tasks
 
 ## PR board
 
-Lists every GitHub pull request you opened, committed to, commented on, or reviewed, grouped by repository and refreshed every minute. It uses the `gh` CLI, so it needs `gh` on `PATH` and `gh auth login` done.
+Lists every GitHub pull request you opened, committed to, commented on, or reviewed, grouped by repository and refreshed every 2 minutes by default (`t` or clicking `refresh:` cycles 30s / 60s / 120s / 300s; `r` refreshes now). It uses the `gh` CLI, so it needs `gh` on `PATH` and `gh auth login` done.
 
 ```
- @octocat   filter:open   role:any                                        ●9 4s ago
+ @octocat   filter:open   role:any   refresh:120s                          ●9 4s ago
 ────────────────────────────────────────────────────────────────────────────────────
 ▍acme/helm-charts  2 PRs
   ● #31    ci: open image bump pull requests from the newest ECR…  ··✎R  alice  ✔ review   40m
@@ -224,17 +224,19 @@ Or from OmO: `/pr-board [mode]`, with the same modes as `/agents-board`.
 | `Enter` / `o` / click again | Open the PR in the browser (`gh pr view --web`) |
 | `f` | Cycle filter: `open` → `recent` (updated in the last 30 days) → `all` |
 | `m` | Cycle role: `any` → `opened` → `committed` → `commented` (includes reviewed) |
+| `t` | Cycle the refresh timer: `30s` → `60s` → `120s` (default) → `300s` |
 | `r` | Refresh now |
 | `g` / `G` | Top / bottom |
 | `q` / `Esc` | Close |
 
-Click `filter:` or `role:` in the header to cycle them.
+Click `filter:`, `role:` or `refresh:` in the header to cycle them.
 
 ### CLI
 
 ```sh
 bin/pr-board --once --filter all --width 140
 bin/pr-board --once --role committed
+bin/pr-board --refresh 30
 bin/pr-board --json --filter recent
 ```
 

@@ -1,10 +1,9 @@
 import { execFile } from 'node:child_process';
 import { paint, width } from '../board/render.mjs';
 import { PrStore, ghRunner } from './data.mjs';
-import { buildRows, emptyRows, FILTERS, footer, header, ROLE_FILTERS } from './render.mjs';
+import { buildRows, emptyRows, FILTERS, footer, header, REFRESH_INTERVALS, ROLE_FILTERS } from './render.mjs';
 
 const SELECTED_BG = '48;5;237';
-const REFRESH_MS = 60_000;
 
 function parseArgs(argv) {
   const options = {};
@@ -17,12 +16,13 @@ function parseArgs(argv) {
     else if (arg === '--color') options.color = true;
     else if (arg === '--filter') options.filter = value();
     else if (arg === '--role') options.role = value();
+    else if (arg === '--refresh') options.refresh = Number(value());
     else if (arg === '--width') options.width = Number(value());
     else if (arg === '--height') options.height = Number(value());
     else if (arg === '-h' || arg === '--help') options.help = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
-  for (const [key, allowed] of [['filter', FILTERS], ['role', ROLE_FILTERS]]) {
+  for (const [key, allowed] of [['filter', FILTERS], ['role', ROLE_FILTERS], ['refresh', REFRESH_INTERVALS]]) {
     if (options[key] !== undefined && !allowed.includes(options[key])) throw new Error(`--${key} must be one of ${allowed.join(', ')}`);
   }
   return options;
@@ -32,10 +32,11 @@ const USAGE = `pr-board: GitHub pull requests you opened, committed to, commente
 
   --filter open|recent|all            open (default), updated in the last 30 days, or everything
   --role any|opened|committed|commented
+  --refresh 30|60|120|300             seconds between refreshes (default 120)
   --once                              print one frame and exit   --json   print the loaded PRs
   --width N --height N                frame size for --once      --no-color
 
-keys: j/k move  Enter/o open in browser  f filter  m role  r refresh  g/G top/bottom  q quit
+keys: j/k move  Enter/o open in browser  f filter  m role  t refresh timer  r refresh  g/G top/bottom  q quit
 mouse: click a row to select it, click it again to open it; wheel scrolls
 env: GH_BIN overrides the gh binary`;
 
@@ -47,6 +48,7 @@ class Board {
     this.ui = {
       filter: options.filter ?? (FILTERS.includes(envFilter) ? envFilter : 'open'),
       role: options.role ?? 'any',
+      refresh: options.refresh ?? 120,
       selectedKey: undefined,
       selectedIndex: 0,
       scroll: 0,
@@ -138,12 +140,18 @@ class Board {
     this.ui.selectedIndex = 0;
   }
 
+  cycleRefresh() {
+    this.ui.refresh = REFRESH_INTERVALS[(REFRESH_INTERVALS.indexOf(this.ui.refresh) + 1) % REFRESH_INTERVALS.length];
+    this.onRefreshInterval?.();
+  }
+
   click(x, y) {
     if (!this.layout) return undefined;
     if (y === 1) {
       const hit = this.layout.hits.find(entry => x >= entry.from && x < entry.to);
       if (hit?.action === 'filter') this.cycleFilter();
       else if (hit?.action === 'role') this.cycleRole();
+      else if (hit?.action === 'refresh') this.cycleRefresh();
       return undefined;
     }
     const row = this.layout.visible[y - this.layout.bodyStart];
@@ -170,8 +178,10 @@ async function interactive(board) {
   const input = process.stdin;
   let closing = false;
   const timers = [];
+  let refreshTimer;
   const restore = () => {
     for (const timer of timers) clearInterval(timer);
+    clearInterval(refreshTimer);
     if (input.isTTY) input.setRawMode(false);
     out.write('\x1b[?1000l\x1b[?1006l\x1b[0m\x1b[?25h\x1b[?1049l');
   };
@@ -197,7 +207,13 @@ async function interactive(board) {
   board.onChange = draw;
   board.refresh().then(draw);
   draw();
-  timers.push(setInterval(() => { board.refresh().then(draw); }, REFRESH_MS));
+  // Restarted whenever the interval changes, so the new one counts from now.
+  const schedule = () => {
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => { board.refresh().then(draw); }, board.ui.refresh * 1000);
+  };
+  board.onRefreshInterval = schedule;
+  schedule();
   // Redraw every second so the "updated Ns ago" clock and loading state stay current.
   timers.push(setInterval(draw, 1000));
 
@@ -225,6 +241,7 @@ async function interactive(board) {
       else if (key === 'G') board.move(1e6);
       else if (key === 'f') board.cycleFilter();
       else if (key === 'm') board.cycleRole();
+      else if (key === 't') board.cycleRefresh();
       else if (key === 'r') board.refresh().then(draw);
       else if (key === '\r' || key === '\n' || key === 'o') { if (await board.openSelected() && popup) return quit(0); }
     }
