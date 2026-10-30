@@ -52,6 +52,25 @@ description = "OmO agents board"
 
 Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
 
+### Live subagent output
+
+On a **subagent** row (Agents view, Tasks tree, or a DAG node with a task id), press **Enter** or **click the row again** to open a read-only, live-tailing transcript inside the board — like `tail -f` on the session log. The viewer never writes to OmO state (it does not call `omo --session`).
+
+| Key | Action |
+| --- | --- |
+| `j` `k` / ↑ ↓ / wheel | Scroll the transcript |
+| `PgUp` / `PgDn` / `Space` | Page up / down |
+| `g` / `G` | Top / bottom (`G` re-enables **following**) |
+| `t` | Show all thinking (default: first 2 lines) |
+| `e` | Expand the task prompt and tool results |
+| `p` | Focus the owning session's herdr pane |
+| `O` | Open this viewer in a new split (`OMO_BOARD_FOLLOW=<taskId>`) |
+| `Esc` / `←` / `h` | Back to the board (or `q` when opened via split env) |
+
+Session header rows keep the old behavior: click toggles session scope; **Enter** focuses that session's pane. Use **`p`** on any row to jump to the pane (the old Enter behavior for subagent rows).
+
+**Mouse:** click **◂ back** to return to the board; wheel scrolls.
+
 ## Tasks board
 
 Shows OmO **todo** lists (the `todo` tool) as a **tree** per session: main-session phases and items, nested **subagent** rows (with their own todo lists), tree guides, and fold/unfold. Scope and session cycling work like the agents board (`g`, `[` `]`). Press **`f`** to cycle the **status** filter (`all`, `open`, in progress, pending, completed, abandoned). Press **`v`** or **Tab** to switch **Agents** / **DAG** / **Tasks**.
@@ -70,7 +89,7 @@ Shows OmO **todo** lists (the `todo` tool) as a **tree** per session: main-sessi
 └ ▸ ✔ explore · Find workflow files                                 3/3   1m10s
 ```
 
-Completed phases and finished subagents start **folded** (`▸`); press **Space** on a row (or click **▸/▾**) to toggle. **`→`** / **`l`** expand, **`←`** / **`h`** collapse (on a leaf, collapse jumps to the parent). **`z`** folds all nodes in scope; **`Z`** expands all.
+Completed phases and finished subagents start **folded** (`▸`); press **Space** on a row (or click **▸/▾**) to toggle. **`→`** / **`l`** expand, **`←`** / **`h`** collapse (on a leaf, collapse jumps to the parent). **`z`** folds all nodes in scope; **`Z`** expands all. Subagent rows support the same **Enter** / **click-again** live output, **`p`**, and **`O`** keys as the agents board.
 
 ### Open it
 
@@ -80,13 +99,13 @@ Completed phases and finished subagents start **folded** (`▸`); press **Space*
 | `herdr-omo-toolbox.open-tasks-split` | Split to the right of the current pane |
 | `herdr-omo-toolbox.open-tasks-tab` | Its own tab |
 
-Or from OmO: `/tasks-board [mode]` (same modes as `/agents-board`). `/agents-board` opens the agents view; `/tasks-board` opens tasks directly.
+Or from OmO: `/agents-board [mode]`. Switch to the **Tasks** view with `v` or `Tab`, or use the `open-tasks*` actions above.
 
 Todo data is read incrementally from OmO session transcripts: main sessions under `~/.omo/agent/sessions/`, and subagent transcripts from each task's `host_session.session_path` (or `children/<task>/sessions/<task>/`). The board only loads todos while the **Tasks** view is active.
 
 ### OmO extension
 
-`omo_extensions/herdr-omo-toolbox.js` is an OmO extension that adds `/agents-board [mode]`, `/tasks-board [mode]` (with tab completion for the mode), and `/rename-tab <name>`:
+`omo_extensions/herdr-omo-toolbox.js` is an OmO extension that adds `/agents-board [mode]` (with tab completion for the mode) and `/rename-tab <name>`:
 
 | Mode | Opens |
 | --- | --- |
@@ -122,13 +141,15 @@ Remove the old `herdr-omo-agents.js` extension if you had it installed.
 | `h` `l` / ← → | Collapse / expand selected foldable row (Tasks view) |
 | `z` / `Z` | Fold all / expand all in scope (Tasks view) |
 | `j` `k` / ↑ ↓ / wheel | Move selection |
-| `Enter` | Focus the herdr pane that owns the selected session |
+| `Enter` | Subagent row: **live output**; session header: focus that session's pane |
+| `p` | Focus the herdr pane for the selected row's session |
+| `O` | Open live output for the selected subagent in a split pane |
 | `r` | Refresh now |
 | `q` / `Esc` | Close |
 
 It opens in **global** scope, **Agents** view, filter **active**.
 
-**Mouse:** click a row to select it and click it again to jump to its pane. Click a session header to open that session and click it again to go back to global. In the header, click `GLOBAL`/`SESSION`, `Agents`/`DAG`/`Tasks`, `filter:`, or `status:` to switch them.
+**Mouse:** click a row to select it; click a **subagent** row again for live output. Click a session header to open that session and click it again to go back to global. In the header, click `GLOBAL`/`SESSION`, `Agents`/`DAG`/`Tasks`, `filter:`, or `status:` to switch them.
 
 The session in the herdr pane you last focused is highlighted.
 
@@ -155,6 +176,8 @@ Set `OMO_AGENTS_DIR` to read a different OmO agent directory.
 
 ```sh
 bin/agents-board --once --scope global --view dag --filter all --width 140
+bin/agents-board --once --follow st_01a18a30 --width 110 --height 40
+bin/agents-board --json --follow st_01a18a30
 bin/agents-board --once --view tasks --filter today --status open
 bin/agents-board --json --scope session --session-pane w11:p1
 bin/agents-board --json --view tasks
@@ -235,7 +258,7 @@ This plugin's description includes **Automatic tab titles**, so **herdr-bar** de
 ## Layout
 
 - `board/` — live agents and tasks board (`main.mjs`, data/render)
-- `omo_extensions/` — OmO extensions: `/agents-board`, `/tasks-board`, `/rename-tab`, and agent status
+- `omo_extensions/` — OmO extensions: `/agents-board`, `/rename-tab`, and agent status
 - `tabs/` — automatic tab titles, icons, MRU state, and tests
 - `bin/agents-board` — launcher for the board
 - `bin/tabs` — launcher for the tab watcher and actions

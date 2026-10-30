@@ -1,8 +1,9 @@
 import { writeFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
-import { anchorPane, defaultAgentDir, paneSessions, Store } from './data.mjs';
+import { anchorPane, defaultAgentDir, paneSessions, Store, transcriptFile } from './data.mjs';
 import { buildView, emptyRows, expandAllTaskFolds, FILTERS, foldAllTaskFolds, footer, header, keepTask, paint, setTaskFold, STATUS_FILTERS, toggleTaskFold, width } from './render.mjs';
+import { Viewer } from './viewer.mjs';
 
 const VIEWS = ['agents', 'dag', 'tasks'];
 const DAY = 24 * 60 * 60 * 1000;
@@ -27,6 +28,7 @@ function parseArgs(argv) {
     else if (arg === '--width') options.width = Number(value());
     else if (arg === '--height') options.height = Number(value());
     else if (arg === '--agent-dir') options.agentDir = value();
+    else if (arg === '--follow') options.follow = value();
     else if (arg === '-h' || arg === '--help') options.help = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
@@ -45,9 +47,10 @@ const USAGE = `agents-board: live board of OmO subagents, DAG runs, and todo lis
   --width N --height N      frame size for --once      --no-color
   --agent-dir <path>        OmO agent dir (default ~/.omo/agent)
 
-keys: g global/session  s selected session  v/Tab view  a filter  f status  [ ] session  j/k move  Space fold (tasks)  z/Z fold all  Enter jump  r refresh  q quit
-mouse: click a row to select it, click it again to jump to its pane; click a session header to open/close
-       that session; click GLOBAL/SESSION, Agents/DAG/Tasks, filter, or status in the header; wheel scrolls`;
+keys: g global/session  s selected session  v/Tab view  a filter  f status  [ ] session  j/k move  Space fold (tasks)  z/Z fold all
+       Enter/click-again live output on subagent rows  p pane  O split viewer  r refresh  q quit
+mouse: click a row to select it, click a subagent row again for live output; session header click toggles scope;
+       Enter on session header jumps to pane; wheel scrolls`;
 
 function herdr(args) {
   return new Promise(resolve => {
@@ -79,6 +82,8 @@ class Board {
     this.panes = { bySession: new Map(), byPane: new Map(), panes: new Map() };
     this.tick = 0;
     this.last = '';
+    this.viewer = undefined;
+    this.viewerSaved = undefined;
   }
 
   refreshData() {
@@ -162,7 +167,44 @@ class Board {
     this.ui.folded = fold ? foldAllTaskFolds(this.ui.folded, this.foldKeys ?? []) : expandAllTaskFolds(this.ui.folded, this.foldKeys ?? []);
   }
 
+  findTask(taskId) {
+    return this.data.tasks.find(task => task.id === taskId);
+  }
+
+  openViewer(taskId) {
+    const task = this.findTask(taskId);
+    if (!task) { this.ui.message = `Unknown task ${taskId}.`; return false; }
+    this.viewerSaved = { selectedKey: this.ui.selectedKey, selectedIndex: this.ui.selectedIndex, scroll: this.ui.scroll };
+    this.viewer = new Viewer(this.store, task, { standalone: false });
+    this.viewer.refresh();
+    return true;
+  }
+
+  closeViewer() {
+    if (this.viewerSaved) {
+      this.ui.selectedKey = this.viewerSaved.selectedKey;
+      this.ui.selectedIndex = this.viewerSaved.selectedIndex;
+      this.ui.scroll = this.viewerSaved.scroll;
+    }
+    this.viewer = undefined;
+    this.viewerSaved = undefined;
+  }
+
+  viewerFrame(columns, rows) {
+    const color = this.options.color ?? true;
+    return this.viewer.frame(columns, rows, this.tick, { color });
+  }
+
+  selectedTaskId() {
+    return this.selected?.target?.taskId;
+  }
+
+  canOpenViewer() {
+    return Boolean(this.selectedTaskId());
+  }
+
   frame(columns, rows) {
+    if (this.viewer) return this.viewerFrame(columns, rows);
     const now = Date.now();
     const view = this.view(columns);
     const color = this.options.color ?? true;
@@ -280,13 +322,27 @@ class Board {
       else this.showSession(row.target.sessionId);
       return undefined;
     }
-    if (row.key === this.ui.selectedKey) return 'jump';
+    if (row.key === this.ui.selectedKey) return this.selectedTaskId() ? 'viewer' : 'jump';
     this.ui.selectedKey = row.key;
     return undefined;
   }
 
+  async openViewerSplit(taskId) {
+    const id = taskId ?? this.selectedTaskId();
+    if (!id) return false;
+    const args = ['plugin', 'pane', 'open', '--plugin', 'herdr-omo-toolbox', '--entrypoint', 'side', '--placement', 'split', '--direction', 'right', '--focus', '--env', `OMO_BOARD_FOLLOW=${id}`];
+    if (process.env.HERDR_PANE_ID) args.push('--target-pane', process.env.HERDR_PANE_ID);
+    const result = await herdr(args);
+    if (!result.ok) { this.ui.message = `Could not open viewer split: ${(result.stderr || result.stdout || '').trim().slice(0, 120)}`; return false; }
+    return true;
+  }
+
   async jump() {
-    const sessionId = this.selected?.target?.sessionId;
+    let sessionId = this.selected?.target?.sessionId;
+    if (!sessionId && this.viewer?.task) {
+      const task = this.viewer.task;
+      sessionId = task.rootSessionId ?? task.sessionId;
+    }
     const pane = sessionId && this.panes.bySession.get(sessionId);
     if (!pane) { this.ui.message = 'That session has no live herdr pane.'; return false; }
     const result = await herdr(['agent', 'focus', pane.paneId]);
@@ -330,7 +386,8 @@ async function interactive(board) {
   board.refreshData();
   draw();
 
-  timers.push(setInterval(() => { board.refreshData(); }, 1500));
+  timers.push(setInterval(() => { board.refreshData(); if (board.viewer) board.viewer.refresh(); }, 1500));
+  timers.push(setInterval(() => { if (board.viewer) board.viewer.refresh(); }, 1000));
   timers.push(setInterval(() => { board.refreshPanes().then(draw, () => {}); }, 2000));
   timers.push(setInterval(() => { board.tick += 1; draw(); }, 250));
 
@@ -343,9 +400,37 @@ async function interactive(board) {
       const mouse = key.match(/^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/);
       if (mouse) {
         const [button, x, y] = mouse.slice(1, 4).map(Number);
+        if (board.viewer) {
+          if (button === 64) board.viewer.wheel(-3, (process.stdout.rows || 30) - 6);
+          else if (button === 65) board.viewer.wheel(3, (process.stdout.rows || 30) - 6);
+          else if (button === 0 && mouse[4] === 'M') {
+            const action = board.viewer.click(x, y);
+            if (action === 'back') {
+              if (board.viewer.standalone) return quit(0);
+              board.closeViewer();
+            }
+          }
+          continue;
+        }
         if (button === 64) board.move(-3);
         else if (button === 65) board.move(3);
-        else if (button === 0 && mouse[4] === 'M' && board.click(x, y) === 'jump' && await board.jump() && popup) return quit(0);
+        else if (button === 0 && mouse[4] === 'M') {
+          const action = board.click(x, y);
+          if (action === 'viewer') board.openViewer(board.selectedTaskId());
+          else if (action === 'jump' && await board.jump() && popup) return quit(0);
+        }
+        continue;
+      }
+      if (board.viewer) {
+        const pageSize = Math.max(1, (process.stdout.rows || 30) - 6);
+        const action = board.viewer.key(key, pageSize);
+        if (action === 'back' || action === 'quit') {
+          if (board.viewer.standalone || action === 'quit') return quit(0);
+          board.closeViewer();
+        }
+        else if (action === 'pane') await board.jump();
+        else if (action === 'split') await board.openViewerSplit(board.viewer.taskId);
+        draw();
         continue;
       }
       if (key === 'q' || key === '\x03' || key === '\x1b') return quit(0);
@@ -369,11 +454,21 @@ async function interactive(board) {
       else if (key === 'f') board.cycleStatus();
       else if (key === ']') board.cycleSession(1);
       else if (key === '[') board.cycleSession(-1);
-      else if (key === 'r') { board.refreshData(); await board.refreshPanes(); }
-      else if (key === '\r' || key === '\n') { if (await board.jump() && popup) return quit(0); }
+      else if (key === 'r') { board.refreshData(); await board.refreshPanes(); if (board.viewer) board.viewer.refresh(); }
+      else if (key === 'p') { if (await board.jump() && popup) return quit(0); }
+      else if (key === 'O') { await board.openViewerSplit(); }
+      else if (key === '\r' || key === '\n') {
+        if (board.selected?.header) { if (await board.jump() && popup) return quit(0); }
+        else if (board.canOpenViewer()) board.openViewer(board.selectedTaskId());
+        else if (await board.jump() && popup) return quit(0);
+      }
     }
     draw();
   });
+}
+
+function followTaskId(options) {
+  return options.follow ?? process.env.OMO_BOARD_FOLLOW;
 }
 
 async function main() {
@@ -382,17 +477,33 @@ async function main() {
   catch (error) { console.error(`agents-board: ${error.message}\n\n${USAGE}`); process.exit(2); }
   if (options.help) { console.log(USAGE); return; }
   const board = new Board(options);
+  const followId = followTaskId(options);
   if (process.env.HERDR_PLUGIN_STATE_DIR) {
     try { writeFileSync(join(process.env.HERDR_PLUGIN_STATE_DIR, 'last-context.json'), process.env.HERDR_PLUGIN_CONTEXT_JSON ?? '{}'); }
     catch { /* diagnostics only */ }
   }
-  if (options.once || options.json || !process.stdout.isTTY) {
+  const printFrame = options.once || options.json || !process.stdout.isTTY;
+  const prepareFollow = async () => {
+    if (!followId) return;
     board.refreshData();
     await board.refreshPanes();
     board.refreshData();
+    const task = board.findTask(followId) ?? { id: followId, summary: followId, agent: 'task', status: 'unknown', terminal: false, transcript: '' };
+    board.viewer = new Viewer(board.store, task, { standalone: Boolean(process.env.OMO_BOARD_FOLLOW) });
+    board.viewer.refresh();
+  };
+  if (printFrame) {
+    await prepareFollow();
     if (options.color === undefined) board.options.color = Boolean(process.stdout.isTTY);
     const lines = board.frame(options.width ?? process.stdout.columns ?? 120, options.height ?? process.stdout.rows ?? 40);
-    if (options.json) {
+    if (options.json && followId) {
+      const result = board.store.transcript(board.viewer?.task?.transcript);
+      console.log(JSON.stringify({
+        taskId: followId,
+        transcript: transcriptFile(board.viewer?.task?.transcript) ?? null,
+        entries: result.entries.length,
+      }, null, 2));
+    } else if (options.json) {
       console.log(JSON.stringify({
         anchor: board.anchor ?? null,
         scope: board.ui.scope,
@@ -409,6 +520,7 @@ async function main() {
     } else console.log(lines.map(line => line.replace(/\s+$/, '')).join('\n'));
     return;
   }
+  await prepareFollow();
   await interactive(board);
 }
 

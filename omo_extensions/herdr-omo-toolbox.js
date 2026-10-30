@@ -11,9 +11,9 @@ const MODES = [
 	{ name: "tab", help: "its own tab", args: () => ["--entrypoint", "side", "--placement", "tab", "--focus"] },
 ];
 
-function boardHelp(title) {
+function boardHelp() {
 	return [
-		`${title} [mode]`,
+		"/agents-board [mode]",
 		...MODES.map((mode) => `  ${mode.name.padEnd(10)} ${mode.help}`),
 		"  help       show this help",
 	].join("\n");
@@ -27,9 +27,9 @@ function herdr(args) {
 	});
 }
 
-function registerBoard(pi, name, title, envView) {
-	pi.registerCommand(name, {
-		description: `${title}: /${name} [${MODES.map((mode) => mode.name).join("|")}|help]`,
+export default function (pi) {
+	pi.registerCommand("agents-board", {
+		description: `Open the OmO Agents board: /agents-board [${MODES.map((mode) => mode.name).join("|")}|help]`,
 		getArgumentCompletions: (prefix) => {
 			const items = [...MODES, { name: "help", help: "show modes" }]
 				.filter((mode) => mode.name.startsWith(prefix.trim()))
@@ -39,17 +39,17 @@ function registerBoard(pi, name, title, envView) {
 		handler: async (args, ctx) => {
 			const modeName = String(args ?? "").trim() || "split";
 			if (["help", "-h", "--help", "?"].includes(modeName)) {
-				ctx.ui.notify(boardHelp(`/${name}`), "info");
+				ctx.ui.notify(boardHelp(), "info");
 				return;
 			}
 			const mode = MODES.find((entry) => entry.name === modeName);
 			if (!mode) {
-				ctx.ui.notify(`/${name}: unknown mode "${modeName}"\n${boardHelp(`/${name}`)}`, "error");
+				ctx.ui.notify(`/agents-board: unknown mode "${modeName}"\n${boardHelp()}`, "error");
 				return;
 			}
 			const pane = process.env.HERDR_PANE_ID;
 			if (!pane) {
-				ctx.ui.notify(`/${name} only works inside a herdr pane`, "error");
+				ctx.ui.notify("/agents-board only works inside a herdr pane", "error");
 				return;
 			}
 			const { error, output } = await herdr([
@@ -59,17 +59,12 @@ function registerBoard(pi, name, title, envView) {
 				"--plugin",
 				PLUGIN,
 				"--env",
-				`OMO_BOARD_VIEW=${envView}`,
+				"OMO_BOARD_VIEW=agents",
 				...mode.args(pane),
 			]);
-			if (error) ctx.ui.notify(`/${name}: ${output || error.message}`, "error");
+			if (error) ctx.ui.notify(`/agents-board: ${output || error.message}`, "error");
 		},
 	});
-}
-
-export default function (pi) {
-	registerBoard(pi, "agents-board", "Open the OmO Agents board", "agents");
-	registerBoard(pi, "tasks-board", "Open the OmO Tasks board", "tasks");
 
 	pi.registerCommand("rename-tab", {
 		description: "Rename the herdr tab this OmO session is in: /rename-tab <name>",

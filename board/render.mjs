@@ -13,7 +13,7 @@ const TODO_GLYPH = {
   abandoned: ['⊘', '9;90', 'abandoned'],
 };
 
-const STATUS = {
+export const STATUS = {
   running: ['', '33'], starting: ['○', '33'], retrying: ['↻', '33'],
   pending: ['○', '90'], queued: ['○', '90'], scheduled: ['○', '90'],
   blocked: ['◇', '35'], paused: ['‖', '34'],
@@ -22,10 +22,10 @@ const STATUS = {
   interrupted: ['!', '33'], lost: ['!', '33'], stale: ['!', '33'],
 };
 
-const seg = (text, style = '', action) => ({ text: String(text ?? ''), style, action });
+export const seg = (text, style = '', action) => ({ text: String(text ?? ''), style, action });
 const ACTIVE_BG = '48;5;53';
 
-function icon(status, tick) {
+export function icon(status, tick) {
   const [glyph, color] = STATUS[status] ?? ['?', '90'];
   return seg(status === 'running' ? SPINNER[tick % SPINNER.length] : glyph, color);
 }
@@ -43,6 +43,58 @@ export function width(text) {
   let total = 0;
   for (const char of text) total += charWidth(char.codePointAt(0));
   return total;
+}
+
+export function wrap(text, size) {
+  if (size <= 0) return [''];
+  const raw = String(text ?? '').split('\n');
+  const collapsed = [];
+  let blank = false;
+  for (const line of raw) {
+    if (!line) {
+      if (!blank) collapsed.push('');
+      blank = true;
+      continue;
+    }
+    blank = false;
+    collapsed.push(line);
+  }
+  const out = [];
+  for (const line of collapsed) {
+    if (!line) { out.push(''); continue; }
+    let rest = line;
+    while (rest) {
+      if (width(rest) <= size) { out.push(rest); break; }
+      let used = 0;
+      let cut = 0;
+      let lastSpace = -1;
+      for (const char of rest) {
+        const w = charWidth(char.codePointAt(0));
+        if (used + w > size) break;
+        if (char === ' ') lastSpace = cut + char.length;
+        used += w;
+        cut += char.length;
+      }
+      if (cut <= 0) {
+        used = 0;
+        cut = 0;
+        for (const char of rest) {
+          const w = charWidth(char.codePointAt(0));
+          if (used + w > size) break;
+          used += w;
+          cut += char.length;
+        }
+        if (cut <= 0) cut = 1;
+      } else if (lastSpace > 0) {
+        out.push(rest.slice(0, lastSpace).trimEnd());
+        rest = rest.slice(lastSpace).trimStart();
+        continue;
+      }
+      out.push(rest.slice(0, cut));
+      rest = rest.slice(cut).trimStart();
+    }
+  }
+  return out.length ? out : [''];
 }
 
 export function fit(text, size, align = 'left') {
@@ -754,10 +806,10 @@ export function header(view, ui, now, columns) {
   return [line, [seg('─'.repeat(columns), '90')]];
 }
 
-export const HINTS = 'click select · click again/⏎ jump  g global/session  s session  v view  a filter  f status  [ ] cycle  j/k  q quit';
-const SHORT_HINTS = 'click  g scope  s session  v view  a filter  f status  [ ]  j/k  q quit';
-const TASKS_HINTS = 'click select · ▸ toggle fold  g scope  s session  v view  a filter  f status  Space fold  z/Z all  [ ]  j/k  q quit';
-const TASKS_SHORT_HINTS = 'click  ▸ fold  g scope  v view  a/f filter  Space  z/Z  [ ]  j/k  q quit';
+export const HINTS = 'click select · click again/⏎ live output  p pane  O split  g scope  s session  v view  a filter  [ ]  j/k  q quit';
+const SHORT_HINTS = 'click  ⏎ live  p pane  O split  g scope  v view  a filter  [ ]  j/k  q quit';
+const TASKS_HINTS = 'click  ⏎ live  p pane  O split  ▸ fold  g scope  v view  a/f filter  Space  z/Z  [ ]  j/k  q quit';
+const TASKS_SHORT_HINTS = 'click  ⏎ live  p pane  ▸ fold  g scope  v view  a/f  Space  z/Z  [ ]  j/k  q quit';
 
 export function footer(selected, columns, message, ui) {
   const hints = ui?.view === 'tasks'

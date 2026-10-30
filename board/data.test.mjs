@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, utimesSync } fro
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
-import { Store, normalizeTodos } from './data.mjs';
+import { Store, normalizeTodos, toolArgument } from './data.mjs';
 
 test('normalizeTodos rejects bad input', () => {
   assert.equal(normalizeTodos(null), null);
@@ -115,4 +115,22 @@ test('todosAt reads child transcript directory by path', () => {
   const store = new Store(agentDir);
   const state = store.todosAt(childDir, 'task-child-1');
   assert.equal(state.phases[0].tasks[0].content, 'child item');
+});
+
+test('toolArgument prefers existing keys and respects max length', () => {
+  assert.equal(toolArgument({ command: 'ls', path: '/tmp' }), 'ls');
+  assert.equal(toolArgument({ path: '/tmp/a' }), '/tmp/a');
+  assert.equal(toolArgument({ pattern: 'foo' }), 'foo');
+  assert.equal(toolArgument({ command: 'x'.repeat(80) }, 10), 'x'.repeat(10));
+});
+
+test('toolArgument falls back to extended keys and todo op', () => {
+  assert.equal(toolArgument({ file_path: '/repo/src/main.ts' }), '/repo/src/main.ts');
+  assert.equal(toolArgument({ message: 'hello' }), 'hello');
+  assert.equal(toolArgument({ objective: 'ship it' }), 'ship it');
+  assert.equal(toolArgument({ task: 'fix bug' }), 'fix bug');
+  assert.equal(toolArgument({ task_id: 'st_abc' }), 'st_abc');
+  assert.equal(toolArgument({ bash_id: 'bash-1' }), 'bash-1');
+  assert.equal(toolArgument({ op: 'add' }), 'add');
+  assert.equal(toolArgument({ command: 'echo', op: 'add' }), 'echo');
 });

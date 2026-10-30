@@ -13,6 +13,11 @@ export function defaultAgentDir(env = process.env) {
 }
 
 const clean = value => String(value ?? '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x1f\x7f-\x9f]+/g, ' ').trim();
+export const cleanKeepNewlines = value => String(value ?? '')
+  .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+  .replace(/[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]/g, ' ')
+  .replace(/\r\n/g, '\n')
+  .replace(/\r/g, '\n');
 const text = value => (typeof value === 'string' && value.trim() ? clean(value) : undefined);
 const time = value => {
   if (typeof value !== 'string' && typeof value !== 'number') return undefined;
@@ -136,11 +141,24 @@ export function stages(run) {
   return rows;
 }
 
+export function transcriptFile(path) {
+  if (!path) return null;
+  let file = path;
+  if (!file.endsWith('.jsonl')) {
+    const newest = list(path).filter(name => name.endsWith('.jsonl')).sort().pop();
+    if (!newest) return null;
+    file = join(path, newest);
+  }
+  try { statSync(file); return file; }
+  catch { return null; }
+}
+
 export class Store {
   constructor(agentDir = defaultAgentDir()) {
     this.agentDir = agentDir;
     this.cache = new Map();
     this.todoCache = new Map();
+    this.transcriptCache = new Map();
   }
 
   readJson(path) {
@@ -187,13 +205,31 @@ export class Store {
     return { tasks: dedupe(tasks), runs: dedupe(runs) };
   }
 
-  activity(path) {
-    let file = path;
-    if (!file.endsWith('.jsonl')) {
-      const newest = list(path).filter(name => name.endsWith('.jsonl')).sort().pop();
-      if (!newest) return {};
-      file = join(path, newest);
+  transcript(path) {
+    const file = transcriptFile(path);
+    if (!file) return { entries: [], size: 0, file: null };
+    let info;
+    try { info = statSync(file); }
+    catch { this.transcriptCache.delete(file); return { entries: [], size: 0, file }; }
+    const size = info.size;
+    let cached = this.transcriptCache.get(file);
+    if (!cached || size < cached.offset) cached = { offset: 0, entries: [] };
+    const chunk = readBytes(file, cached.offset, size);
+    if (chunk.buffer.length) {
+      const lastNewline = chunk.buffer.lastIndexOf(10);
+      if (lastNewline >= 0) {
+        const complete = chunk.buffer.subarray(0, lastNewline + 1).toString('utf8');
+        parseTranscriptLines(complete.split('\n').filter(Boolean), cached.entries);
+        cached.offset += lastNewline + 1;
+      }
     }
+    this.transcriptCache.set(file, cached);
+    return { entries: cached.entries, size, file };
+  }
+
+  activity(path) {
+    const file = transcriptFile(path);
+    if (!file) return {};
     let info;
     try { info = statSync(file); }
     catch { return {}; }
@@ -329,12 +365,75 @@ function tail(file, size, bytes) {
   return start > 0 ? lines.slice(1) : lines;
 }
 
-function toolArgument(args) {
+export function toolArgument(args, max = 60) {
   if (!args || typeof args !== 'object') return '';
-  const value = args.command ?? args.path ?? args.pattern ?? args.url ?? args.query ?? args.summary ?? args.description ?? args.prompt;
+  const value = args.command ?? args.path ?? args.pattern ?? args.url ?? args.query ?? args.summary ?? args.description ?? args.prompt
+    ?? args.file_path ?? args.message ?? args.objective ?? args.task ?? args.task_id ?? args.bash_id
+    ?? args.op;
   if (typeof value !== 'string') return '';
   const short = clean(value).replaceAll(homedir(), '~').replace(/(?:~|\/)?(?:[^\s/]+\/){2,}([^\s/]+\/[^\s/]+)/g, '…/$1');
-  return short.slice(0, 60);
+  return short.slice(0, max);
+}
+
+const cap = (value, max) => {
+  const text = value ?? '';
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)} …`;
+};
+
+function messageText(content) {
+  if (typeof content === 'string') return cleanKeepNewlines(content);
+  if (!Array.isArray(content)) return '';
+  return content.filter(part => part?.type === 'text').map(part => cleanKeepNewlines(part.text ?? '')).join('');
+}
+
+function toolResultText(content) {
+  if (typeof content === 'string') return cleanKeepNewlines(content);
+  if (!Array.isArray(content)) return '';
+  return content.filter(part => part?.type === 'text').map(part => cleanKeepNewlines(part.text ?? '')).join('\n');
+}
+
+function parseTranscriptLines(lines, entries) {
+  for (const line of lines) {
+    let entry;
+    try { entry = JSON.parse(line); }
+    catch { continue; }
+    if (entry.type !== 'message') continue;
+    const message = entry.message;
+    if (!message) continue;
+    const at = time(entry.timestamp);
+    const model = text(message.model) ?? text(entry.model);
+    if (message.role === 'user') {
+      const joined = messageText(message.content);
+      if (joined) entries.push({ kind: 'user', at, text: cap(joined, 8000) });
+    } else if (message.role === 'assistant') {
+      for (const part of message.content ?? []) {
+        if (part?.type === 'thinking') {
+          const body = cleanKeepNewlines(part.thinking ?? part.text ?? '');
+          if (body) entries.push({ kind: 'thinking', at, model, text: cap(body, 8000) });
+        } else if (part?.type === 'text') {
+          const body = cleanKeepNewlines(part.text ?? '');
+          if (body) entries.push({ kind: 'text', at, model, text: cap(body, 8000) });
+        } else if (part?.type === 'toolCall') {
+          entries.push({
+            kind: 'tool',
+            id: part.id ?? part.toolCallId,
+            name: text(part.name) ?? 'tool',
+            args: part.arguments ?? part.input ?? {},
+            summary: toolArgument(part.arguments ?? part.input),
+            at,
+            model,
+          });
+        }
+      }
+    } else if (message.role === 'toolResult') {
+      const body = cap(toolResultText(message.content ?? message.text), 6000);
+      const toolCallId = message.toolCallId ?? message.id;
+      const toolEntry = [...entries].reverse().find(item => item.kind === 'tool' && item.id === toolCallId);
+      if (toolEntry) toolEntry.result = { text: body, isError: Boolean(message.isError) };
+      else entries.push({ kind: 'result', name: text(message.toolName) ?? 'tool', at, text: body, isError: Boolean(message.isError) });
+    }
+  }
 }
 
 export function lastActivity(lines) {
