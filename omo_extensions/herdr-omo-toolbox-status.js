@@ -1,5 +1,16 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
+import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+
+// Debug log: on while ~/.local/state/herdr-omo-toolbox/status-debug exists.
+const DEBUG_DIR = path.join(homedir(), ".local", "state", "herdr-omo-toolbox");
+function debug(...parts) {
+	try {
+		if (!existsSync(path.join(DEBUG_DIR, "status-debug"))) return;
+		appendFileSync(path.join(DEBUG_DIR, "status.log"), `${new Date().toISOString()} pid=${process.pid} pane=${process.env.HERDR_PANE_ID} ${parts.join(" ")}\n`);
+	} catch {}
+}
 
 const GLOBAL_KEY = Symbol.for("herdr-omo-toolbox.status.v1");
 const OWNER_ENV = "HERDR_OMO_TOOLBOX_STATUS_OWNER";
@@ -25,6 +36,54 @@ export function taskCounts(data, sessionId) {
 		else other++;
 	}
 	return { running, pending, other };
+}
+
+const AGENT_DIR = process.env.OMO_AGENTS_DIR || path.join(homedir(), ".omo", "agent");
+const SCAN_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function pidAlive(pid) {
+	try { process.kill(pid, 0); return true; } catch (error) { return error.code === "EPERM"; }
+}
+
+function listDir(dir) {
+	try { return readdirSync(dir); } catch { return []; }
+}
+
+/** OmO task stores: the registry plus every project's senpi-task dir. */
+export function taskStores(agentDir = AGENT_DIR) {
+	const stores = new Set();
+	try {
+		const registry = JSON.parse(readFileSync(path.join(agentDir, "rpc", "task-stores.json"), "utf8"));
+		for (const store of Object.keys(registry?.stores ?? {})) stores.add(store);
+	} catch {}
+	for (const project of listDir(path.join(agentDir, "projects"))) stores.add(path.join(agentDir, "projects", project, "senpi-task"));
+	return [...stores];
+}
+
+/**
+ * Running/pending tasks of a session read from OmO's task files, for when no
+ * omo.task.updated event has arrived yet (e.g. after a reload mid-task).
+ * Tasks whose host process is gone don't count; files older than a day are skipped.
+ */
+export function scanBusyTasks(sessionId, { agentDir = AGENT_DIR, now = Date.now(), alive = pidAlive } = {}) {
+	if (!sessionId) return 0;
+	let busy = 0;
+	for (const store of taskStores(agentDir)) {
+		const dir = path.join(store, "tasks");
+		for (const file of listDir(dir)) {
+			if (!file.endsWith(".json")) continue;
+			const full = path.join(dir, file);
+			try {
+				if (now - statSync(full).mtimeMs > SCAN_WINDOW_MS) continue;
+				const task = JSON.parse(readFileSync(full, "utf8"));
+				if (task?.parent_session_id !== sessionId) continue;
+				if (task.status !== "running" && task.status !== "pending") continue;
+				if (Number.isSafeInteger(task.host_pid) && task.host_pid > 0 && !alive(task.host_pid)) continue;
+				busy++;
+			} catch {}
+		}
+	}
+	return busy;
 }
 
 export function computeState({ prompts, active, compacting, busyTasks }) {
@@ -201,7 +260,10 @@ export class DeliveryQueue {
 	}
 
 	#exec(args, done) {
-		this.execFn(this.bin, args, { env: this.execEnv, timeout: 750, killSignal: "SIGKILL", maxBuffer: 65536, shell: false }, (err) => done(!err));
+		this.execFn(this.bin, args, { env: this.execEnv, timeout: 750, killSignal: "SIGKILL", maxBuffer: 65536, shell: false }, (err, _out, stderr) => {
+			debug("exec", args[1], args.includes("--state") ? args[args.indexOf("--state") + 1] : "", err ? `FAIL ${String(stderr || err.message).trim().slice(0, 200)}` : "ok");
+			done(!err);
+		});
 	}
 }
 
@@ -225,13 +287,16 @@ function createReporter(pi, config, globalState, token, exec) {
 		sessionName = ctx.sessionManager.getSessionName() ?? "";
 	};
 
+	// Live events win; until one arrives, use the last task-file scan.
+	let scannedBusy = 0;
+	const rescan = () => { scannedBusy = scanBusyTasks(sessionId); };
 	const busyTasks = () => {
 		const counts = taskSnapshots.has(sessionId) ? taskCounts(taskSnapshots.get(sessionId), sessionId) : undefined;
-		return counts ? counts.running + counts.pending : 0;
+		return counts ? counts.running + counts.pending : scannedBusy;
 	};
 
 	const publish = () => {
-		if (!claimed || closing || !owns()) return;
+		if (!claimed || closing || !owns()) return debug("publish skipped", `claimed=${claimed}`, `closing=${closing}`, `owns=${owns()}`);
 		const bt = busyTasks();
 		const isActive = active || tools.size > 0;
 		const { state, message } = computeState({ prompts, active: isActive, compacting, busyTasks: bt });
@@ -254,6 +319,7 @@ function createReporter(pi, config, globalState, token, exec) {
 
 	const handlers = {
 		session_start: (_e, ctx) => {
+			debug("session_start", `mode=${ctx.mode}`, `hasUI=${ctx.hasUI}`, `session=${ctx.sessionManager.getSessionId()}`);
 			readSession(ctx);
 			if (ctx.mode === "tui" && ctx.hasUI) {
 				globalState.owner = token;
@@ -267,6 +333,7 @@ function createReporter(pi, config, globalState, token, exec) {
 				compacting = !!ctx.isCompacting?.();
 				tools.clear();
 				prompts.length = 0;
+				rescan();
 				clearRefreshMeta();
 				refreshMeta = setInterval(() => {
 					if (!owns()) {
@@ -275,6 +342,7 @@ function createReporter(pi, config, globalState, token, exec) {
 					}
 					// Resend state too, so a release from another reporter (e.g. old omo-herdr) heals.
 					queue.lastAgent = null;
+					rescan();
 					publish();
 				}, 15000);
 				refreshMeta.unref();
@@ -299,6 +367,7 @@ function createReporter(pi, config, globalState, token, exec) {
 		session_info_changed: (_e, ctx) => { readSession(ctx); publish(); },
 		message_end: (_e, ctx) => { readSession(ctx); publish(); },
 		session_shutdown: (e) => {
+			debug("session_shutdown", `reason=${e?.reason}`, `claimed=${claimed}`, `owns=${owns()}`);
 			if (!claimed || !owns()) return;
 			// /new, resume and fork reuse this instance: keep the pane, session_start republishes.
 			if (["new", "resume", "fork"].includes(e?.reason)) {
@@ -338,12 +407,13 @@ export default function (pi) {
 /** The extension body; tests pass a fake `exec(bin, args, opts, cb)`. */
 export function install(pi, { exec } = {}) {
 	const config = readEnvironment(process.env);
-	if (!config) return;
+	if (!config) return debug("skip: not in herdr", `HERDR_ENV=${process.env.HERDR_ENV}`, `bin=${process.env.HERDR_BIN_PATH}`);
 	const owner = process.env[OWNER_ENV];
-	if (owner && owner !== String(process.pid)) return;
+	if (owner && owner !== String(process.pid)) return debug("skip: owned by", owner);
 	const globalState = globalThis[GLOBAL_KEY] ?? { seq: 0 };
 	if (!owner) process.env[OWNER_ENV] = String(process.pid);
 	globalThis[GLOBAL_KEY] = globalState;
 	const token = {};
+	debug("loaded");
 	createReporter(pi, config, globalState, token, exec);
 }

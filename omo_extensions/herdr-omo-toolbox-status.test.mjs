@@ -276,3 +276,28 @@ describe("session lifecycle", () => {
 		assert.equal(calls.slice(releaseAt + 1)[0], "report-agent", calls.join(","));
 	}));
 });
+
+describe("scanBusyTasks", () => {
+	it("counts the session's live running/pending tasks from task files", async () => {
+		const { mkdtempSync, mkdirSync, writeFileSync, utimesSync } = await import("node:fs");
+		const { tmpdir } = await import("node:os");
+		const { join } = await import("node:path");
+		const { scanBusyTasks } = await import("./herdr-omo-toolbox-status.js");
+		const agentDir = mkdtempSync(join(tmpdir(), "omo-agent-"));
+		const tasks = join(agentDir, "projects", "bff-1", "senpi-task", "tasks");
+		mkdirSync(tasks, { recursive: true });
+		const write = (name, task) => writeFileSync(join(tasks, `${name}.json`), JSON.stringify(task));
+		write("a", { task_id: "st_a", status: "running", parent_session_id: "s1", host_pid: 100 });
+		write("b", { task_id: "st_b", status: "pending", parent_session_id: "s1", host_pid: null });
+		write("c", { task_id: "st_c", status: "completed", parent_session_id: "s1" });
+		write("d", { task_id: "st_d", status: "running", parent_session_id: "other", host_pid: 100 });
+		write("e", { task_id: "st_e", status: "running", parent_session_id: "s1", host_pid: 999 });
+		write("old", { task_id: "st_old", status: "running", parent_session_id: "s1", host_pid: 100 });
+		const twoDaysAgo = (Date.now() - 2 * 86400000) / 1000;
+		utimesSync(join(tasks, "old.json"), twoDaysAgo, twoDaysAgo);
+		const alive = (pid) => pid === 100;
+		assert.equal(scanBusyTasks("s1", { agentDir, alive }), 2);
+		assert.equal(scanBusyTasks("other", { agentDir, alive }), 1);
+		assert.equal(scanBusyTasks("", { agentDir, alive }), 0);
+	});
+});
