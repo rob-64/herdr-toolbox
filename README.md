@@ -366,7 +366,3 @@ cp "$(herdr plugin list --json --plugin herdr-toolbox | jq -r '.result.plugins[0
 ```
 
 Then change `herdr-omo-toolbox.` to `herdr-toolbox.` in any keybindings in `~/.config/herdr/config.toml` and run `herdr server reload-config`.
-
-## License
-
-MIT
