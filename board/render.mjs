@@ -935,7 +935,7 @@ export function header(view, ui, now, columns) {
   const tab = (name, id) => seg(` ${name} `, ui.view === id ? '1;7' : '90', `view:${id}`);
   if (ui.view === 'tasks') {
     const t = view.totals;
-    const left = [seg(' OmO Tasks ', '1'), seg(' '), ...scope, seg('  '), tab('Agents', 'agents'), tab('DAG', 'dag'), tab('Tasks', 'tasks'), seg('  '),
+    const left = [seg(' '), ...scope, seg('  '), tab('Agents', 'agents'), tab('DAG', 'dag'), tab('Tasks', 'tasks'), seg('  '),
       seg(`filter:${ui.filter}`, '90', 'filter'), seg('  '), seg(`status:${ui.status ?? 'all'}`, '90', 'status')];
     const right = [seg(`◐ ${t.in_progress} in progress`, t.in_progress ? '1;33' : '90'), seg('  '), seg(`○ ${t.pending} todo`, '90'), seg('  '),
       seg(`✔ ${t.completed} done`, '32'), seg('  '), seg(`⊘ ${t.abandoned}`, '90'), seg(`  ${new Date(now).toTimeString().slice(0, 8)} `, '90')];
@@ -948,7 +948,7 @@ export function header(view, ui, now, columns) {
     return [line, [seg('─'.repeat(columns), '90')]];
   }
   const t = view.totals;
-  const left = [seg(' OmO Agents ', '1'), seg(' '), ...scope, seg('  '), tab('Agents', 'agents'), tab('DAG', 'dag'), tab('Tasks', 'tasks'), seg('  '), seg(`filter:${ui.filter}`, '90', 'filter')];
+  const left = [seg(' '), ...scope, seg('  '), tab('Agents', 'agents'), tab('DAG', 'dag'), tab('Tasks', 'tasks'), seg('  '), seg(`filter:${ui.filter}`, '90', 'filter')];
   const right = [seg(`${SPINNER[0]} ${t.running} running`, t.running ? '33' : '90'), seg('  '), seg(`○ ${t.waiting}`, '90'), seg('  '),
     seg(`✔ ${t.completed}`, '32'), seg('  '), seg(`✖ ${t.failed}`, t.failed ? '31' : '90'), seg(`  ${new Date(now).toTimeString().slice(0, 8)} `, '90')];
   const compact = [seg(`${SPINNER[0]}${t.running}`, t.running ? '33' : '90'), seg(` ✔${t.completed}`, '32'), seg(` ✖${t.failed} `, t.failed ? '31' : '90')];
