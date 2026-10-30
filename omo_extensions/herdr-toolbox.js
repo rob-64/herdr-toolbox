@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 
-const PLUGIN = "herdr-omo-toolbox";
+const PLUGIN = "herdr-toolbox";
 
 // herdr entrypoints per board: `popup` floats, `pane` is placed by the mode (split/overlay/zoomed/tab).
 const BOARDS = {

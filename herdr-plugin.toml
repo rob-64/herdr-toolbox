@@ -1,8 +1,8 @@
-id = "herdr-omo-toolbox"
-name = "OmO Toolbox"
+id = "herdr-toolbox"
+name = "Herdr Toolbox"
 version = "0.3.0"
 min_herdr_version = "0.9.0"
-description = "OmO toolbox: live agents, tasks and GitHub PR boards, automatic tab titles with agent icons and status, and alt-tab to the last tab"
+description = "Herdr toolbox: GitHub PR board, automatic tab titles with agent icons and status, alt-tab to the last tab, and live OmO agents and tasks boards"
 platforms = ["linux", "macos"]
 
 [[build]]
@@ -31,42 +31,42 @@ id = "open"
 title = "OmO Agents"
 description = "Open the OmO agents board as a popup"
 contexts = ["global", "workspace"]
-command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "board", "--focus"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-toolbox", "--entrypoint", "board", "--focus"]
 
 [[actions]]
 id = "open-split"
 title = "OmO Agents (split)"
 description = "Open the OmO agents board in a split to the right"
 contexts = ["global", "workspace"]
-command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "side", "--placement", "split", "--direction", "right", "--no-focus"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-toolbox", "--entrypoint", "side", "--placement", "split", "--direction", "right", "--no-focus"]
 
 [[actions]]
 id = "open-tab"
 title = "OmO Agents (tab)"
 description = "Open the OmO agents board in its own tab"
 contexts = ["global", "workspace"]
-command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "side", "--placement", "tab", "--focus"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-toolbox", "--entrypoint", "side", "--placement", "tab", "--focus"]
 
 [[actions]]
 id = "open-tasks"
 title = "OmO Tasks"
 description = "Open the OmO tasks board as a popup"
 contexts = ["global", "workspace"]
-command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "board", "--focus", "--env", "OMO_BOARD_VIEW=tasks"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-toolbox", "--entrypoint", "board", "--focus", "--env", "OMO_BOARD_VIEW=tasks"]
 
 [[actions]]
 id = "open-tasks-split"
 title = "OmO Tasks (split)"
 description = "Open the OmO tasks board in a split to the right"
 contexts = ["global", "workspace"]
-command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "side", "--placement", "split", "--direction", "right", "--no-focus", "--env", "OMO_BOARD_VIEW=tasks"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-toolbox", "--entrypoint", "side", "--placement", "split", "--direction", "right", "--no-focus", "--env", "OMO_BOARD_VIEW=tasks"]
 
 [[actions]]
 id = "open-tasks-tab"
 title = "OmO Tasks (tab)"
 description = "Open the OmO tasks board in its own tab"
 contexts = ["global", "workspace"]
-command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "side", "--placement", "tab", "--focus", "--env", "OMO_BOARD_VIEW=tasks"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-toolbox", "--entrypoint", "side", "--placement", "tab", "--focus", "--env", "OMO_BOARD_VIEW=tasks"]
 
 [[panes]]
 id = "prs"
@@ -89,21 +89,21 @@ id = "open-prs"
 title = "GitHub PRs"
 description = "Open the GitHub PR board as a popup"
 contexts = ["global", "workspace"]
-command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "prs", "--focus"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-toolbox", "--entrypoint", "prs", "--focus"]
 
 [[actions]]
 id = "open-prs-split"
 title = "GitHub PRs (split)"
 description = "Open the GitHub PR board in a split to the right"
 contexts = ["global", "workspace"]
-command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "prs-side", "--placement", "split", "--direction", "right", "--no-focus"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-toolbox", "--entrypoint", "prs-side", "--placement", "split", "--direction", "right", "--no-focus"]
 
 [[actions]]
 id = "open-prs-tab"
 title = "GitHub PRs (tab)"
 description = "Open the GitHub PR board in its own tab"
 contexts = ["global", "workspace"]
-command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-omo-toolbox", "--entrypoint", "prs-side", "--placement", "tab", "--focus"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "herdr-toolbox", "--entrypoint", "prs-side", "--placement", "tab", "--focus"]
 
 [[startup]]
 command = ["bin/tabs", "ensure"]

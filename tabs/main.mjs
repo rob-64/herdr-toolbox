@@ -21,7 +21,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MAIN = join(__dirname, 'main.mjs');
-const PLUGIN_ID = process.env.HERDR_PLUGIN_ID || 'herdr-omo-toolbox';
+const PLUGIN_ID = process.env.HERDR_PLUGIN_ID || 'herdr-toolbox';
 
 function isProcessAlive(pid) {
   try {

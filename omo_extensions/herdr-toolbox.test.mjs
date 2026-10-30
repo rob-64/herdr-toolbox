@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { boardHelp, getModeArgumentCompletions, resolveMode } from "./herdr-omo-toolbox.js";
+import { boardHelp, getModeArgumentCompletions, resolveMode } from "./herdr-toolbox.js";
 
 const PANE = "w1:p1";
 
@@ -82,7 +82,7 @@ describe("boardHelp", () => {
 
 async function run(arg, { command = "agents-board", bin = "/usr/bin/true" } = {}) {
 	const commands = {};
-	const { default: register } = await import("./herdr-omo-toolbox.js");
+	const { default: register } = await import("./herdr-toolbox.js");
 	register({ registerCommand: (name, def) => { commands[name] = def; } });
 	const saved = { pane: process.env.HERDR_PANE_ID, bin: process.env.HERDR_BIN_PATH };
 	process.env.HERDR_PANE_ID = PANE;
@@ -99,7 +99,7 @@ async function run(arg, { command = "agents-board", bin = "/usr/bin/true" } = {}
 
 // A fake herdr that fails and prints its argv, so the handler's error note carries the exact args.
 async function herdrArgs(command, arg) {
-	const dir = mkdtempSync(join(tmpdir(), "omo-toolbox-ext-"));
+	const dir = mkdtempSync(join(tmpdir(), "herdr-toolbox-ext-"));
 	const bin = join(dir, "herdr");
 	writeFileSync(bin, "#!/bin/sh\nprintf '%s\\n' \"$@\" >&2\nexit 1\n");
 	chmodSync(bin, 0o755);
@@ -111,7 +111,7 @@ async function herdrArgs(command, arg) {
 	}
 }
 
-const OPEN = ["plugin", "pane", "open", "--plugin", "herdr-omo-toolbox"];
+const OPEN = ["plugin", "pane", "open", "--plugin", "herdr-toolbox"];
 
 describe("/agents-board handler", () => {
 	it("opens a board (no help) for a bare command and for every mode", async () => {

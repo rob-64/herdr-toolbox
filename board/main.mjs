@@ -333,7 +333,7 @@ class Board {
   async openViewerSplit(taskId) {
     const id = taskId ?? this.selectedTaskId();
     if (!id) return false;
-    const args = ['plugin', 'pane', 'open', '--plugin', 'herdr-omo-toolbox', '--entrypoint', 'side', '--placement', 'split', '--direction', 'right', '--focus', '--env', `OMO_BOARD_FOLLOW=${id}`];
+    const args = ['plugin', 'pane', 'open', '--plugin', 'herdr-toolbox', '--entrypoint', 'side', '--placement', 'split', '--direction', 'right', '--focus', '--env', `OMO_BOARD_FOLLOW=${id}`];
     if (process.env.HERDR_PANE_ID) args.push('--target-pane', process.env.HERDR_PANE_ID);
     const result = await herdr(args);
     if (!result.ok) { this.ui.message = `Could not open viewer split: ${(result.stderr || result.stdout || '').trim().slice(0, 120)}`; return false; }

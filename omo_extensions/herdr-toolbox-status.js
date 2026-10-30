@@ -3,8 +3,8 @@ import path from "node:path";
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
-// Debug log: on while ~/.local/state/herdr-omo-toolbox/status-debug exists.
-const DEBUG_DIR = path.join(homedir(), ".local", "state", "herdr-omo-toolbox");
+// Debug log: on while ~/.local/state/herdr-toolbox/status-debug exists.
+const DEBUG_DIR = path.join(homedir(), ".local", "state", "herdr-toolbox");
 function debug(...parts) {
 	try {
 		if (!existsSync(path.join(DEBUG_DIR, "status-debug"))) return;
@@ -12,6 +12,8 @@ function debug(...parts) {
 	} catch {}
 }
 
+// Guard keys keep the pre-rename herdr-omo-toolbox names: if an old copy of this extension is still
+// installed beside the new one, they share the guard and only one status reporter runs.
 const GLOBAL_KEY = Symbol.for("herdr-omo-toolbox.status.v1");
 const OWNER_ENV = "HERDR_OMO_TOOLBOX_STATUS_OWNER";
 

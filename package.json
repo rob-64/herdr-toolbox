@@ -1,1 +1,1 @@
-{"name":"herdr-omo-toolbox","version":"0.3.0","private":true,"type":"module","scripts":{"test":"node --test \"*/*.test.mjs\""}}
+{"name":"herdr-toolbox","version":"0.3.0","private":true,"type":"module","scripts":{"test":"node --test \"*/*.test.mjs\""}}

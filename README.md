@@ -1,14 +1,14 @@
-# herdr-omo-toolbox
+# herdr-toolbox
 
-A [herdr](https://herdr.dev) plugin for running [OmO](https://github.com/code-yeongyu/oh-my-openagent) in herdr: live agents, tasks, and GitHub PR boards, automatic tab titles with agent icons, status glyphs, and MRU alt-tab.
+A [herdr](https://herdr.dev) plugin: a GitHub PR board, automatic tab titles with agent icons and status glyphs, and MRU alt-tab for any agent herdr detects, plus live agents and tasks boards for [OmO](https://github.com/code-yeongyu/oh-my-openagent).
 
 ## Install
 
 ```sh
-herdr plugin install rob-64/herdr-omo-toolbox
+herdr plugin install rob-64/herdr-toolbox
 ```
 
-This replaces the older `herdr-omo-agents` plugin — uninstall it first if you had it:
+This replaces the older `herdr-omo-toolbox` and `herdr-omo-agents` plugins. See [Upgrading from herdr-omo-toolbox](#upgrading-from-herdr-omo-toolbox) if you had the first; uninstall the second if you had it:
 
 ```sh
 herdr plugin uninstall herdr-omo-agents
@@ -50,9 +50,9 @@ Shows every OmO subagent and DAG run in one live board: status, agent, task, mod
 
 | Action | What it does |
 | --- | --- |
-| `herdr-omo-toolbox.open` | Popup over the current pane |
-| `herdr-omo-toolbox.open-split` | Split to the right of the current pane |
-| `herdr-omo-toolbox.open-tab` | Its own tab |
+| `herdr-toolbox.open` | Popup over the current pane |
+| `herdr-toolbox.open-split` | Split to the right of the current pane |
+| `herdr-toolbox.open-tab` | Its own tab |
 
 Bind one to a key in `~/.config/herdr/config.toml`:
 
@@ -60,11 +60,11 @@ Bind one to a key in `~/.config/herdr/config.toml`:
 [[keys.command]]
 key = "prefix+o"
 type = "plugin_action"
-command = "herdr-omo-toolbox.open"
+command = "herdr-toolbox.open"
 description = "OmO agents board"
 ```
 
-Or run it from a shell: `herdr plugin action invoke herdr-omo-toolbox.open`.
+Or run it from a shell: `herdr plugin action invoke herdr-toolbox.open`.
 
 ### Live subagent output
 
@@ -87,7 +87,7 @@ Session header rows keep the old behavior: click toggles session scope; **Enter*
 
 ## Tasks board
 
-Shows OmO **todo** lists (the `todo` tool) as a **tree** per session: main-session phases and items, nested **subagent** rows (with their own todo lists), tree guides, and fold/unfold. Scope and session cycling work like the agents board (`g`, `[` `]`). Press **`f`** to cycle the **status** filter (`all`, `open`, in progress, pending, completed, abandoned). Press **`v`** or **Tab** to switch **Agents** / **DAG** / **Tasks**. Session and subagent rows show the agent/model-vendor icon from the same `icons` config as herdr tab titles (`~/.config/herdr/plugins/herdr-omo-toolbox/config.json`).
+Shows OmO **todo** lists (the `todo` tool) as a **tree** per session: main-session phases and items, nested **subagent** rows (with their own todo lists), tree guides, and fold/unfold. Scope and session cycling work like the agents board (`g`, `[` `]`). Press **`f`** to cycle the **status** filter (`all`, `open`, in progress, pending, completed, abandoned). Press **`v`** or **Tab** to switch **Agents** / **DAG** / **Tasks**. Session and subagent rows show the agent/model-vendor icon from the same `icons` config as herdr tab titles (`~/.config/herdr/plugins/herdr-toolbox/config.json`).
 
 ```
  OmO Tasks  GLOBAL   Agents  DAG  Tasks   filter:today   status:all
@@ -109,9 +109,9 @@ Completed phases and finished subagents start **folded** (`▸`); press **Space*
 
 | Action | What it does |
 | --- | --- |
-| `herdr-omo-toolbox.open-tasks` | Popup over the current pane |
-| `herdr-omo-toolbox.open-tasks-split` | Split to the right of the current pane |
-| `herdr-omo-toolbox.open-tasks-tab` | Its own tab |
+| `herdr-toolbox.open-tasks` | Popup over the current pane |
+| `herdr-toolbox.open-tasks-split` | Split to the right of the current pane |
+| `herdr-toolbox.open-tasks-tab` | Its own tab |
 
 Or from OmO: `/agents-board [mode]`. Switch to the **Tasks** view with `v` or `Tab`, or use the `open-tasks*` actions above.
 
@@ -119,7 +119,7 @@ Todo data is read incrementally from OmO session transcripts: main sessions unde
 
 ### OmO extension
 
-`omo_extensions/herdr-omo-toolbox.js` is an OmO extension that adds `/agents-board [mode]` and `/pr-board [mode]` (with tab completion for the mode) and `/rename-tab <name>`. Both board commands take the same modes:
+`omo_extensions/herdr-toolbox.js` is an OmO extension that adds `/agents-board [mode]` and `/pr-board [mode]` (with tab completion for the mode) and `/rename-tab <name>`. Both board commands take the same modes:
 
 | Mode | Short | Opens |
 | --- | --- | --- |
@@ -136,7 +136,7 @@ Todo data is read incrementally from OmO session transcripts: main sessions unde
 Install it, then start a new OmO session or run `/reload`:
 
 ```sh
-cp omo_extensions/herdr-omo-toolbox.js ~/.omo/agent/extensions/herdr-omo-toolbox.js
+cp omo_extensions/herdr-toolbox.js ~/.omo/agent/extensions/herdr-toolbox.js
 ```
 
 Remove the old `herdr-omo-agents.js` extension if you had it installed.
@@ -233,9 +233,9 @@ The first load, a filter change, and a load after a failed `gh` call only record
 
 | Action | What it does |
 | --- | --- |
-| `herdr-omo-toolbox.open-prs` | Popup over the current pane (closes after opening a PR) |
-| `herdr-omo-toolbox.open-prs-split` | Split to the right of the current pane |
-| `herdr-omo-toolbox.open-prs-tab` | Its own tab |
+| `herdr-toolbox.open-prs` | Popup over the current pane (closes after opening a PR) |
+| `herdr-toolbox.open-prs-split` | Split to the right of the current pane |
+| `herdr-toolbox.open-prs-tab` | Its own tab |
 
 Or from OmO: `/pr-board [mode]`, with the same modes as `/agents-board`.
 
@@ -267,7 +267,7 @@ Set `GH_BIN` to use a different `gh` binary.
 
 ## Agent status
 
-When OmO runs inside a herdr pane, `omo_extensions/herdr-omo-toolbox-status.js` reports agent state back to herdr so the agent list shows whether OmO is idle, working, or blocked. **Background subagent tasks** (`running` or `pending`) count as **working**, so the spinner keeps going while OmO waits on subagents.
+When OmO runs inside a herdr pane, `omo_extensions/herdr-toolbox-status.js` reports agent state back to herdr so the agent list shows whether OmO is idle, working, or blocked. **Background subagent tasks** (`running` or `pending`) count as **working**, so the spinner keeps going while OmO waits on subagents.
 
 The session name becomes the reported title when OmO has one. Install both extensions (new OmO session or `/reload`):
 
@@ -287,7 +287,7 @@ Makes tabs usable with OmO agents:
 
 Requires a **Nerd Font** (e.g. Hack Nerd Font Mono) for agent and status glyphs (Material Design icons in the Nerd Font PUA, vertically aligned with the agent icon).
 
-On startup Herdr runs `tabs ensure`, which starts a background watcher. You can also use the **Start tab titles** / **Stop tab titles** plugin actions (`herdr-omo-toolbox.tabs-start`, `herdr-omo-toolbox.tabs-stop`).
+On startup Herdr runs `tabs ensure`, which starts a background watcher. You can also use the **Start tab titles** / **Stop tab titles** plugin actions (`herdr-toolbox.tabs-start`, `herdr-toolbox.tabs-stop`).
 
 ### Keybinding (last tab)
 
@@ -297,7 +297,7 @@ Add to your Herdr config:
 [[keys.command]]
 key = "prefix+tab"
 type = "plugin_action"
-command = "herdr-omo-toolbox.last-tab"
+command = "herdr-toolbox.last-tab"
 description = "last tab"
 ```
 
@@ -347,6 +347,25 @@ This plugin's description includes **Automatic tab titles**, so **herdr-bar** de
 - `bin/pr-board` — launcher for the PR board
 - `bin/tabs` — launcher for the tab watcher and actions
 - `scripts/check-runtime.sh` — plugin build check (bun or node 18+)
+
+## Upgrading from herdr-omo-toolbox
+
+The plugin was renamed from `herdr-omo-toolbox` to `herdr-toolbox`. Action ids (`herdr-toolbox.open-prs`, ...), the plugin config dir, and the OmO extension file names changed with it.
+
+```sh
+# keep your tab-title config, if you had one
+old=$(herdr plugin config-dir herdr-omo-toolbox); [ -f "$old/config.json" ] && cp "$old/config.json" /tmp/herdr-toolbox-config.json
+herdr plugin action invoke herdr-omo-toolbox.tabs-stop   # strip icons/status from tabs the old watcher named
+herdr plugin uninstall herdr-omo-toolbox
+herdr plugin install rob-64/herdr-toolbox
+[ -f /tmp/herdr-toolbox-config.json ] && mkdir -p "$(herdr plugin config-dir herdr-toolbox)" && mv /tmp/herdr-toolbox-config.json "$(herdr plugin config-dir herdr-toolbox)/config.json"
+
+# OmO users: swap the extension files, then /reload open OmO sessions
+rm -f ~/.omo/agent/extensions/herdr-omo-toolbox.js ~/.omo/agent/extensions/herdr-omo-toolbox-status.js
+cp "$(herdr plugin list --json --plugin herdr-toolbox | jq -r '.result.plugins[0].plugin_root')"/omo_extensions/*.js ~/.omo/agent/extensions/
+```
+
+Then change `herdr-omo-toolbox.` to `herdr-toolbox.` in any keybindings in `~/.config/herdr/config.toml` and run `herdr server reload-config`.
 
 ## License
 

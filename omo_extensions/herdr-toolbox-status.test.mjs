@@ -9,7 +9,7 @@ import {
 	reportMetadataArgs,
 	taskCounts,
 	DeliveryQueue,
-} from "./herdr-omo-toolbox-status.js";
+} from "./herdr-toolbox-status.js";
 
 describe("readEnvironment", () => {
 	const valid = {
@@ -243,7 +243,7 @@ describe("session lifecycle", () => {
 	}
 
 	it("keeps the pane across /new and reports the new session", () => withEnv(async () => {
-		const { install } = await import("./herdr-omo-toolbox-status.js");
+		const { install } = await import("./herdr-toolbox-status.js");
 		const { calls, exec } = fakeExec();
 		const pi = fakePi();
 		install(pi, { exec });
@@ -257,7 +257,7 @@ describe("session lifecycle", () => {
 	}));
 
 	it("delays a reloaded instance's first report until the old release lands", () => withEnv(async () => {
-		const { install } = await import("./herdr-omo-toolbox-status.js");
+		const { install } = await import("./herdr-toolbox-status.js");
 		const { calls, exec, releaseHeld } = fakeExec({ hold: true });
 		const oldPi = fakePi();
 		install(oldPi, { exec });
@@ -282,7 +282,7 @@ describe("scanBusyTasks", () => {
 		const { mkdtempSync, mkdirSync, writeFileSync, utimesSync } = await import("node:fs");
 		const { tmpdir } = await import("node:os");
 		const { join } = await import("node:path");
-		const { scanBusyTasks } = await import("./herdr-omo-toolbox-status.js");
+		const { scanBusyTasks } = await import("./herdr-toolbox-status.js");
 		const agentDir = mkdtempSync(join(tmpdir(), "omo-agent-"));
 		const tasks = join(agentDir, "projects", "bff-1", "senpi-task", "tasks");
 		mkdirSync(tasks, { recursive: true });

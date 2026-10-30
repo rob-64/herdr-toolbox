@@ -14,7 +14,7 @@ const MRU_CAP = 50;
 const LOG_MAX = 1024 * 1024;
 
 function defaultStateDir() {
-  return join(homedir(), '.local', 'state', 'herdr-omo-toolbox');
+  return join(homedir(), '.local', 'state', 'herdr-toolbox');
 }
 
 export function stateDir() {
@@ -24,7 +24,7 @@ export function stateDir() {
 }
 
 export function configDir() {
-  return process.env.HERDR_PLUGIN_CONFIG_DIR ?? join(homedir(), '.config', 'herdr-omo-toolbox');
+  return process.env.HERDR_PLUGIN_CONFIG_DIR ?? join(homedir(), '.config', 'herdr-toolbox');
 }
 
 function ensureDir(dir) {
