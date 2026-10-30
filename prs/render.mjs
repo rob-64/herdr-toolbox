@@ -105,10 +105,9 @@ export function header(data, ui, view, now, columns) {
     stats.push(seg(` ${glyph}${counts[state]}`, color));
   }
   const status = data.loading ? ' ⟳ loading' : data.fetchedAt ? ` ${ago(now, data.fetchedAt) || '0s'} ago` : '';
+  // No board title: the herdr pane label already says "GitHub PRs".
   const left = [
-    seg(' GitHub PRs ', '1;30;45'),
-    seg(data.login ? ` @${data.login}` : '', '36'),
-    seg('   '),
+    seg(data.login ? ` @${data.login}   ` : ' ', '36'),
     seg(`filter:${ui.filter}`, '1', 'filter'),
     seg('   '),
     seg(`role:${ui.role}`, '1', 'role'),

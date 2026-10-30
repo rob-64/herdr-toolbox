@@ -190,7 +190,7 @@ bin/agents-board --json --view tasks
 Lists every GitHub pull request you opened, committed to, commented on, or reviewed, grouped by repository and refreshed every minute. It uses the `gh` CLI, so it needs `gh` on `PATH` and `gh auth login` done.
 
 ```
- GitHub PRs  @octocat   filter:open   role:any                            ●9 4s ago
+ @octocat   filter:open   role:any                                        ●9 4s ago
 ────────────────────────────────────────────────────────────────────────────────────
 ▍acme/helm-charts  2 PRs
   ● #31    ci: open image bump pull requests from the newest ECR…  ··✎R  alice  ✔ review   40m
