@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { toolArgument, transcriptFile } from './data.mjs';
-import { duration, fit, icon, paint, seg, width, wrap } from './render.mjs';
+import { agentGlyph, duration, fit, icon, modelVendor, paint, seg, vendorColor, width, wrap } from './render.mjs';
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const VIEWER_HINTS = 'j/k scroll  PgUp/PgDn  g/G top/bottom  t thinking  e expand  p pane  O split  Esc back';
@@ -18,12 +18,17 @@ function displayPath(path) {
 
 function headerLine(task, columns, now, tick, following) {
   const back = seg('◂ back', '36', 'back');
-  const left = [back, seg(' '), icon(task.status, tick), seg(' '), seg(task.agent, task.terminal ? '90' : '36'), seg(' · ')];
+  const vendor = modelVendor(task.model) ?? 'default';
+  const vGlyph = agentGlyph(vendor);
+  const vendorExtra = vGlyph ? width(vGlyph) + 1 : 0;
+  const left = [back, seg(' '), icon(task.status, tick), seg(' ')];
+  if (vGlyph) left.push(seg(`${vGlyph} `, vendorColor(vendor)));
+  left.push(seg(task.agent, task.terminal ? '90' : '36'), seg(' · '));
   const stats = [task.turns !== undefined ? `t${task.turns}` : '', task.toolCalls !== undefined ? `⚒${task.toolCalls}` : ''].filter(Boolean).join(' ');
   const rightParts = [shortModel(task.model), elapsed(task, now), stats, following ? '● following' : ''].filter(Boolean);
   const rightText = rightParts.join('  ');
   const rightW = width(rightText) + 2;
-  const fixed = width(back.text) + 1 + 2 + 1 + 16 + 3;
+  const fixed = width(back.text) + 1 + 2 + 1 + vendorExtra + 16 + 3;
   const summaryW = Math.max(8, columns - fixed - rightW);
   left.push(seg(fit(task.summary, summaryW), task.terminal ? '90' : '1'));
   const leftW = left.reduce((n, part) => n + width(part.text), 0);

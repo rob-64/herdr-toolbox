@@ -1,4 +1,55 @@
 import { stages, TERMINAL } from './data.mjs';
+import { iconFor } from '../tabs/labels.mjs';
+import { loadConfig } from '../tabs/state.mjs';
+
+/** @type {object | undefined} */
+let iconConfigOverride;
+
+export function setIconConfig(config) {
+  iconConfigOverride = config;
+}
+
+function iconConfig() {
+  if (iconConfigOverride !== undefined) return iconConfigOverride;
+  return loadConfig();
+}
+
+export function modelVendor(model) {
+  if (!model) return undefined;
+  const s = String(model).toLowerCase();
+  if (/claude|opus|sonnet|haiku|fable/.test(s)) return 'claude';
+  if (/gpt|codex|chatgpt|openai/.test(s)) return 'codex';
+  if (/composer|cursor/.test(s)) return 'cursor';
+  if (/gemini/.test(s)) return 'gemini';
+  return undefined;
+}
+
+export function vendorColor(kind) {
+  const k = kind ?? 'default';
+  if (k === 'claude') return '38;5;209';
+  if (k === 'codex') return '37';
+  if (k === 'cursor') return '36';
+  if (k === 'gemini') return '34';
+  return '35';
+}
+
+export function agentGlyph(kind) {
+  return iconFor(kind ?? 'default', iconConfig());
+}
+
+function sessionAgentIconSeg(agentKind) {
+  const kind = agentKind ?? 'omo';
+  const glyph = agentGlyph(kind);
+  if (!glyph) return [];
+  return [seg(`${glyph} `, vendorColor(kind))];
+}
+
+function modelIconParts(model) {
+  const vendor = modelVendor(model) ?? 'default';
+  const glyph = agentGlyph(vendor);
+  if (!glyph) return { segs: [], extra: 0 };
+  return { segs: [seg(glyph, vendorColor(vendor)), seg(' ')], extra: width(glyph) + 1 };
+}
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const DAY = 24 * 60 * 60 * 1000;
@@ -228,7 +279,7 @@ function sessionHeader(session, now, tick, columns, active) {
   const running = session.tasks.filter(task => task.status === 'running').length;
   const done = session.tasks.filter(task => task.status === 'completed').length;
   const failed = session.tasks.filter(task => ['error', 'failed', 'stale'].includes(task.status)).length;
-  const parts = [seg('▍', active ? '1;35' : live ? '36' : '90'), seg(sessionLabel(session), active ? '1;35' : '1')];
+  const parts = [seg('▍', active ? '1;35' : live ? '36' : '90'), ...sessionAgentIconSeg(live?.agent ?? 'omo'), seg(sessionLabel(session), active ? '1;35' : '1')];
   if (columns >= 110 && session.pane && session.pane.title && session.project && !session.pane.title.includes(session.project)) parts.push(seg(`  ${session.project}`, '90'));
   parts.push(seg('  '));
   if (live) parts.push(status === 'working' ? seg(`${SPINNER[tick % SPINNER.length]} working`, '33') : status === 'blocked' ? seg('◇ needs input', '35') : seg(`● ${status ?? 'live'}`, '36'));
@@ -249,11 +300,12 @@ function taskRow(task, level, columns, now, tick, dagTag) {
   const modelW = columns >= 120 ? 22 : columns >= 96 ? 16 : 0;
   const timeW = 8;
   const statsW = columns >= 110 ? 12 : 0;
-  const fixed = width(indent) + 2 + agentW + 1 + (modelW ? modelW + 1 : 0) + timeW + 1 + (statsW ? statsW : 0);
+  const { segs: vendorSegs, extra: vendorExtra } = modelIconParts(task.model);
+  const fixed = width(indent) + 2 + vendorExtra + agentW + 1 + (modelW ? modelW + 1 : 0) + timeW + 1 + (statsW ? statsW : 0);
   const summaryW = Math.max(10, columns - fixed - 1);
   const summary = dagTag ? `⧉ ${dagTag}  ${task.summary}` : task.summary;
   const stats = [task.turns !== undefined ? `t${task.turns}` : '', task.toolCalls !== undefined ? `⚒${task.toolCalls}` : ''].filter(Boolean).join(' ');
-  const row = [seg(indent), icon(task.status, tick), seg(' '), seg(fit(task.agent, agentW), task.terminal ? '90' : '36'), seg(' '),
+  const row = [seg(indent), icon(task.status, tick), seg(' '), ...vendorSegs, seg(fit(task.agent, agentW), task.terminal ? '90' : '36'), seg(' '),
     seg(fit(summary, summaryW), task.terminal ? '' : '1')];
   if (modelW) row.push(seg(' '), seg(fit(shortModel(task.model), modelW), '90'));
   row.push(seg(' '), seg(fit(elapsed(task, now), timeW, 'right'), task.terminal ? '90' : '33'));
@@ -409,7 +461,7 @@ function sortTodoSessions(a, b) {
 function todoSessionHeader(session, now, tick, columns, active, { ownDone, ownTotal, subagents, subRunning } = {}) {
   const live = session.pane;
   const status = live?.agentStatus;
-  const parts = [seg('▍', active ? '1;35' : live ? '36' : '90'), seg(todoSessionLabel(session), active ? '1;35' : '1')];
+  const parts = [seg('▍', active ? '1;35' : live ? '36' : '90'), ...sessionAgentIconSeg(live?.agent ?? 'omo'), seg(todoSessionLabel(session), active ? '1;35' : '1')];
   parts.push(seg('  '));
   if (live) parts.push(status === 'working' ? seg(`${SPINNER[tick % SPINNER.length]} working`, '33') : status === 'blocked' ? seg('◇ needs input', '35') : seg(`● ${status ?? 'live'}`, '36'));
   else parts.push(seg('○ closed', '90'));
@@ -519,10 +571,11 @@ function appendSubagentRows(ctx, task, depth, lastFlags, ancestorTerminal) {
   const lead = prefix + branch;
   const caret = foldCaret(folded, foldKey, defaultFold, phases.length > 0 || childTasks.length > 0);
   const elapsedText = elapsed(task, now);
+  const { segs: vendorSegs } = modelIconParts(task.model);
   const buildRowSeg = (summary, summaryWidth) => {
     const summaryStyle = task.terminal ? '90' : '1';
     return [seg(lead, '90'), caret, seg(' '),
-      icon(task.status, tick), seg(' '), seg(fit(task.agent, 16), task.terminal ? '90' : '36'), seg(' · '), seg(fit(summary, summaryWidth), summaryStyle),
+      icon(task.status, tick), seg(' '), ...vendorSegs, seg(fit(task.agent, 16), task.terminal ? '90' : '36'), seg(' · '), seg(fit(summary, summaryWidth), summaryStyle),
       seg(' '), seg(fit(stats, statsW, 'right'), '90'), seg(' '), seg(fit(elapsedText, timeW, 'right'), task.terminal ? '90' : '33')];
   };
   const measureSegs = buildRowSeg('', 0);
@@ -708,9 +761,10 @@ function dagRows(run, session, tasksById, columns, now, tick, showSession, activ
       const idW = Math.min(36, Math.max(14, Math.floor(columns * 0.28)));
       const routeW = columns >= 100 ? 16 : 0;
       const timeW = 9;
-      const summaryW = Math.max(8, columns - width(rail) - 2 - idW - 1 - (routeW ? routeW + 1 : 0) - timeW - 2);
+      const { segs: vendorSegs, extra: vendorExtra } = task ? modelIconParts(task.model) : { segs: [], extra: 0 };
+      const summaryW = Math.max(8, columns - width(rail) - 2 - vendorExtra - idW - 1 - (routeW ? routeW + 1 : 0) - timeW - 2);
       const nodeElapsed = node.startedAt ? duration((node.endedAt ?? (TERMINAL.has(node.state) ? node.startedAt : now)) - node.startedAt) : '';
-      const segments = [seg(rail, '90'), icon(node.state, tick), seg(' '), seg(fit(node.id, Math.min(idW, width(node.id))), TERMINAL.has(node.state) ? '' : '1'),
+      const segments = [seg(rail, '90'), icon(node.state, tick), seg(' '), ...vendorSegs, seg(fit(node.id, Math.min(idW, width(node.id))), TERMINAL.has(node.state) ? '' : '1'),
         seg(fit(deps, Math.max(0, idW - width(node.id))), '90'), seg(' '), seg(fit(node.summary, summaryW), TERMINAL.has(node.state) ? '90' : '')];
       if (routeW) segments.push(seg(' '), seg(fit(node.route ?? task?.agent ?? '', routeW), '36'));
       segments.push(seg(' '), seg(fit(node.attempt > 1 ? `#${node.attempt} ${nodeElapsed}` : nodeElapsed, timeW, 'right'), node.state === 'running' ? '33' : '90'));

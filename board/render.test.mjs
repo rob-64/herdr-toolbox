@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { buildView, duration, expandAllTaskFolds, header, isTaskFolded, paint, toggleTaskFold, width } from './render.mjs';
+import { afterEach, test } from 'node:test';
+import { buildView, duration, expandAllTaskFolds, header, isTaskFolded, modelVendor, paint, setIconConfig, toggleTaskFold, width } from './render.mjs';
+import { iconFor } from '../tabs/labels.mjs';
+
+afterEach(() => setIconConfig(undefined));
 
 const now = Date.parse('2026-10-29T18:00:00.000Z');
 const sessionId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -92,6 +95,68 @@ function rowText(view) {
 function rowWidths(view) {
   return view.rows.map(row => width(row.segments.map(part => part.text).join('')));
 }
+
+test('modelVendor maps model families case-insensitively', () => {
+  assert.equal(modelVendor('anthropic-subscription/claude-opus-5-5'), 'claude');
+  assert.equal(modelVendor('Claude Opus 5.5'), 'claude');
+  assert.equal(modelVendor('github-copilot/claude-opus-5.5'), 'claude');
+  assert.equal(modelVendor('chatgpt-subscription/gpt-6-astra'), 'codex');
+  assert.equal(modelVendor('GPT-6 Luna Fast'), 'codex');
+  assert.equal(modelVendor('github-copilot/gpt-5.6-sol'), 'codex');
+  assert.equal(modelVendor('Composer 2.5 Fast'), 'cursor');
+  assert.equal(modelVendor('cursor/composer-2.5-fast'), 'cursor');
+  assert.equal(modelVendor(undefined), undefined);
+  assert.equal(modelVendor('some-unknown-model'), undefined);
+});
+
+test('icons disabled omits vendor icons and extra spaces', () => {
+  setIconConfig({ icons: false });
+  const ui = { view: 'tasks', scope: 'global', filter: 'all', status: 'all', sessionId, activeSessionId: undefined, folded: new Map() };
+  const text = rowText(buildView({ todos, tasks: treeTasks, runs: [] }, panes, ui, now, 140));
+  assert.match(text, /▍demo · Demo session/);
+  assert.doesNotMatch(text, /▍ .· Demo session/);
+  const subRow = text.split('\n').find(line => line.includes('plan-reviewer'));
+  assert.ok(subRow);
+  assert.match(subRow, /⠋ plan-reviewer/);
+  assert.doesNotMatch(subRow, /⠋ . plan-reviewer/);
+});
+
+test('config icon override appears on subagent row', () => {
+  setIconConfig({ icons: { claude: '◆' } });
+  const tasks = [{
+    ...treeTasks[1],
+    model: 'claude-opus-5-5',
+  }];
+  const ui = { view: 'tasks', scope: 'global', filter: 'all', status: 'all', sessionId, activeSessionId: undefined, folded: new Map() };
+  const text = rowText(buildView({ todos: [{ ...todos[0], phases: [] }], tasks, runs: [] }, panes, ui, now, 140));
+  assert.match(text, /◆ plan-reviewer/);
+});
+
+test('agents and tasks rows with icons stay within column width', () => {
+  setIconConfig({ icons: {} });
+  const claudeGlyph = iconFor('claude', { icons: {} });
+  const tasks = [{
+    id: 'task-agents-width',
+    status: 'running',
+    terminal: false,
+    sessionId,
+    rootSessionId: sessionId,
+    agent: 'explore',
+    model: 'anthropic-subscription/claude-opus-5-5',
+    summary: 'x'.repeat(180),
+    startedAt: now - 120_000,
+    updatedAt: now - 10_000,
+  }];
+  const cols = 110;
+  const agentsUi = { view: 'agents', scope: 'global', filter: 'all', sessionId, activeSessionId: undefined };
+  const agentsView = buildView({ todos: [], tasks, runs: [] }, panes, agentsUi, now, cols);
+  for (const w of rowWidths(agentsView)) assert.ok(w <= cols, `agents row width ${w} exceeds ${cols}`);
+  assert.ok(rowText(agentsView).includes(claudeGlyph));
+
+  const tasksUi = { view: 'tasks', scope: 'global', filter: 'all', status: 'all', sessionId, activeSessionId: undefined, folded: new Map() };
+  const tasksView = buildView({ todos: [{ ...todos[0], phases: [] }], tasks, runs: [] }, panes, tasksUi, now, cols);
+  for (const w of rowWidths(tasksView)) assert.ok(w <= cols, `tasks row width ${w} exceeds ${cols}`);
+});
 
 test('tasks view status open hides completed and empty phases', () => {
   const ui = { view: 'tasks', scope: 'global', filter: 'all', status: 'open', sessionId, activeSessionId: undefined, folded: new Map() };

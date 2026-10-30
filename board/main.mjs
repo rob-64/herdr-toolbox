@@ -493,7 +493,12 @@ async function main() {
     board.viewer.refresh();
   };
   if (printFrame) {
-    await prepareFollow();
+    if (followId) await prepareFollow();
+    else {
+      board.refreshData();
+      await board.refreshPanes();
+      board.refreshData();
+    }
     if (options.color === undefined) board.options.color = Boolean(process.stdout.isTTY);
     const lines = board.frame(options.width ?? process.stdout.columns ?? 120, options.height ?? process.stdout.rows ?? 40);
     if (options.json && followId) {
