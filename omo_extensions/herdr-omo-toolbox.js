@@ -17,10 +17,13 @@ function modeLabel(mode) {
 	return `${mode.name} (${mode.short})`;
 }
 
+// A distinct sentinel: every mode also has a `help` (description) field, so `resolved?.help` is truthy for all of them.
+export const HELP = Object.freeze({ help: true });
+
 export function resolveMode(arg) {
 	const token = String(arg ?? "").trim();
 	const key = (token || "split").toLowerCase();
-	if (["help", "-h", "--help", "?", "h"].includes(key)) return { help: true };
+	if (["help", "-h", "--help", "?", "h"].includes(key)) return HELP;
 	return MODES.find((entry) => entry.name.toLowerCase() === key || entry.short.toLowerCase() === key);
 }
 
@@ -58,7 +61,7 @@ export default function (pi) {
 		handler: async (args, ctx) => {
 			const modeName = String(args ?? "").trim() || "split";
 			const resolved = resolveMode(args);
-			if (resolved?.help) {
+			if (resolved === HELP) {
 				ctx.ui.notify(boardHelp(), "info");
 				return;
 			}
