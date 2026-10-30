@@ -25,7 +25,8 @@ export function ghRunner(env = process.env) {
   const bin = env.GH_BIN || 'gh';
   return args => new Promise(resolve => {
     execFile(bin, args, { timeout: 30000, maxBuffer: 32 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve({ ok: !error, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') || (error ? error.message : '') });
+      const missing = error?.code === 'ENOENT' ? `${bin} not found - install the GitHub CLI: https://cli.github.com` : '';
+      resolve({ ok: !error, stdout: String(stdout ?? ''), stderr: missing || String(stderr ?? '') || (error ? error.message : '') });
     });
   });
 }
@@ -186,7 +187,11 @@ export class PrStore {
     if (this.login) return this.login;
     const result = await this.run(['api', 'user', '--jq', '.login']);
     const login = result.stdout.trim();
-    if (!result.ok || !login) throw new Error(firstLine(result.stderr) || 'gh api user failed - run `gh auth login`');
+    if (!result.ok || !login) {
+      const reason = firstLine(result.stderr).replace(/^gh:\s*/, '');
+      const auth = !reason || /auth|401|log ?in/i.test(reason);
+      throw new Error(auth && !reason.includes('gh auth login') ? `${reason || 'not logged in'} - run \`gh auth login\`` : reason);
+    }
     this.login = login;
     return login;
   }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { filterQualifier, mergePrs, normalizePr, prChanges, PrStore, pushedBranches } from './data.mjs';
+import { filterQualifier, ghRunner, mergePrs, normalizePr, prChanges, PrStore, pushedBranches } from './data.mjs';
 
 const now = Date.parse('2026-10-30T12:00:00.000Z');
 const LOGIN = 'me';
@@ -125,6 +125,13 @@ test('a failing source is reported while the others still load', async () => {
   const data = await new PrStore({ run, now: () => now }).load('all');
   assert.deepEqual(data.errors.sort(), ['commented search: HTTP 502', 'push events: HTTP 403: rate limited']);
   assert.deepEqual(data.prs.map(item => item.number).sort(), [1, 3, 4]);
+});
+
+test('gh errors tell a new user what to do', async () => {
+  const unauthorized = fakeGh({ user: fail('gh: Requires authentication (HTTP 401)') });
+  assert.deepEqual((await new PrStore({ run: unauthorized.run, now: () => now }).load('open')).errors, ['gh: Requires authentication (HTTP 401) - run `gh auth login`']);
+  const missing = new PrStore({ run: ghRunner({ GH_BIN: '/nonexistent/gh' }), now: () => now });
+  assert.deepEqual((await missing.load('open')).errors, ['gh: /nonexistent/gh not found - install the GitHub CLI: https://cli.github.com']);
 });
 
 test('an unauthenticated gh yields an error instead of throwing', async () => {
