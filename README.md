@@ -16,6 +16,20 @@ herdr plugin uninstall herdr-omo-agents
 
 It needs `bun` or `node` 18+ on `PATH`. Nothing is built or downloaded.
 
+### Without OmO
+
+You don't need OmO for most of it:
+
+| Feature | Needs |
+| --- | --- |
+| PR board | [`gh`](https://cli.github.com), logged in (`gh auth login`) |
+| Tab titles, icons, status glyphs | Any agent herdr detects (Claude Code, Codex, Cursor, Copilot, Gemini, OpenCode, pi, OmO) |
+| Last tab (alt-tab) | Nothing extra |
+| Agents / tasks boards | OmO; without it they open and show empty lists |
+| `/agents-board`, `/pr-board`, `/rename-tab`, agent status | OmO (they are OmO extensions) |
+
+Without OmO, open the PR board with the `open-prs*` actions below. Live status glyphs for other agents come from herdr's own integrations (`herdr integration install`); without one, the tab shows the unknown glyph.
+
 Having a coding agent install it? Point it at [agents-install.md](agents-install.md): it covers the install, the OmO `/agents-board` extension, and keybindings.
 
 ## Agents board

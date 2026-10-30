@@ -59,6 +59,9 @@ Tabs the user named themselves are left alone; only unnamed tabs (`1`, `2`,
 
 ## 4. Install the OmO extensions (board + status)
 
+Skip this step if the user doesn't use OmO (`command -v omo` finds nothing): the PR board,
+tab titles and last-tab work without it.
+
 The board extension adds `/agents-board [mode]` (each mode has a short alias, e.g. `split`/`s`, `popup`/`p`), `/pr-board [mode]` (same modes; GitHub PRs you opened, committed to, or commented on - needs `gh` logged in), and `/rename-tab <name>` (renames the current tab).
 Open the tasks board from `/agents-board` with `v` or `Tab`, or via the herdr `open-tasks*` actions.
 The status extension reports OmO
