@@ -193,6 +193,7 @@ export class Store {
         if (!file.endsWith('.json')) continue;
         const task = normalizeTask(this.readJson(join(taskDir, file)), store, alive);
         if (task && !task.terminal && !task.tool && !task.line) Object.assign(task, this.activity(task.transcript));
+        if (task && !task.terminal) this.attachTaskMetrics(task);
         if (task) tasks.push(task);
       }
       const runDir = join(store, 'dag', 'runs');
@@ -207,24 +208,71 @@ export class Store {
 
   transcript(path) {
     const file = transcriptFile(path);
-    if (!file) return { entries: [], size: 0, file: null };
+    if (!file) return { entries: [], size: 0, file: null, stats: freshTranscriptStats() };
     let info;
     try { info = statSync(file); }
-    catch { this.transcriptCache.delete(file); return { entries: [], size: 0, file }; }
+    catch { this.transcriptCache.delete(file); return { entries: [], size: 0, file, stats: freshTranscriptStats() }; }
     const size = info.size;
     let cached = this.transcriptCache.get(file);
-    if (!cached || size < cached.offset) cached = { offset: 0, entries: [] };
+    if (!cached || size < cached.offset) cached = { offset: 0, entries: [], stats: freshTranscriptStats() };
+    if (!cached.stats) cached.stats = freshTranscriptStats();
     const chunk = readBytes(file, cached.offset, size);
     if (chunk.buffer.length) {
       const lastNewline = chunk.buffer.lastIndexOf(10);
       if (lastNewline >= 0) {
         const complete = chunk.buffer.subarray(0, lastNewline + 1).toString('utf8');
-        parseTranscriptLines(complete.split('\n').filter(Boolean), cached.entries);
+        parseTranscriptLines(complete.split('\n').filter(Boolean), cached.entries, cached.stats);
         cached.offset += lastNewline + 1;
       }
     }
     this.transcriptCache.set(file, cached);
-    return { entries: cached.entries, size, file };
+    return { entries: cached.entries, size, file, stats: cached.stats };
+  }
+
+  modelsForProvider(store, provider) {
+    if (!store || !provider) return undefined;
+    const entry = store[provider];
+    if (Array.isArray(entry)) return entry;
+    if (entry && Array.isArray(entry.models)) return entry.models;
+    return undefined;
+  }
+
+  // Cursor caps context on its own service, so its limits only apply to the cursor provider;
+  // other providers borrow a window only from non-cursor entries for the same model.
+  contextWindow(provider, modelId) {
+    if (!modelId) return undefined;
+    const slash = modelId.indexOf('/');
+    if (slash > 0 && !provider) [provider, modelId] = [modelId.slice(0, slash), modelId.slice(slash + 1)];
+    const modelsStore = this.readJson(join(this.agentDir, 'models-store.json'));
+    const same = id => typeof id === 'string' && id.replaceAll('.', '-') === modelId.replaceAll('.', '-');
+    const lookup = prov => this.modelsForProvider(modelsStore, prov)?.find(item => same(item?.id))?.contextWindow;
+    if (provider === 'cursor') return lookup('cursor') ?? this.readJson(join(this.agentDir, 'cursor-context-limits.json'))?.[modelId];
+    if (provider && lookup(provider)) return lookup(provider);
+    for (const prov of Object.keys(modelsStore ?? {})) {
+      if (prov === 'cursor') continue;
+      const hit = lookup(prov);
+      if (hit) return hit;
+    }
+    return provider ? undefined : this.readJson(join(this.agentDir, 'cursor-context-limits.json'))?.[modelId];
+  }
+
+  attachTaskMetrics(task) {
+    const { stats } = this.transcript(task.transcript);
+    const contextTokens = stats?.contextTokens;
+    const model = stats?.model;
+    const provider = stats?.provider;
+    const contextWindow = this.contextWindow(provider, model);
+    const contextPct = contextWindow && contextTokens !== undefined
+      ? Math.round((contextTokens / contextWindow) * 100)
+      : undefined;
+    task.metrics = {
+      contextTokens,
+      contextWindow,
+      contextPct,
+      toolErrors: stats?.toolErrors ?? 0,
+      pending: stats?.pending,
+    };
+    if (stats?.pending?.since) task.lastAt = stats.pending.since;
   }
 
   activity(path) {
@@ -393,7 +441,63 @@ function toolResultText(content) {
   return content.filter(part => part?.type === 'text').map(part => cleanKeepNewlines(part.text ?? '')).join('\n');
 }
 
-function parseTranscriptLines(lines, entries) {
+function messageTimestamp(entry) {
+  return time(entry.timestamp) ?? time(entry.message?.timestamp);
+}
+
+function contextTokensFromUsage(usage) {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const direct = usage.contextUsage?.input;
+  if (Number.isSafeInteger(direct) && direct >= 0) return direct;
+  const input = Number.isSafeInteger(usage.input) ? usage.input : 0;
+  const cacheRead = Number.isSafeInteger(usage.cacheRead) ? usage.cacheRead : 0;
+  const cacheWrite = Number.isSafeInteger(usage.cacheWrite) ? usage.cacheWrite : 0;
+  const total = input + cacheRead + cacheWrite;
+  return total > 0 ? total : undefined;
+}
+
+function freshTranscriptStats() {
+  return { contextTokens: undefined, model: undefined, provider: undefined, toolErrors: 0, pending: undefined, openToolCalls: [] };
+}
+
+function updateTranscriptStats(stats, entry) {
+  if (entry.type !== 'message' || !entry.message) return;
+  const message = entry.message;
+  const at = messageTimestamp(entry);
+  if (message.role === 'assistant') {
+    const tokens = contextTokensFromUsage(message.usage);
+    if (tokens !== undefined) stats.contextTokens = tokens;
+    const model = text(message.model) ?? text(entry.model);
+    const provider = text(message.provider) ?? text(entry.provider);
+    if (model) stats.model = model;
+    if (provider) stats.provider = provider;
+    const calls = (message.content ?? []).filter(part => part?.type === 'toolCall');
+    if (calls.length) {
+      stats.openToolCalls = calls.map(part => ({
+        id: part.id ?? part.toolCallId,
+        name: text(part.name) ?? 'tool',
+        since: at,
+      }));
+      stats.pending = { kind: 'tool', name: stats.openToolCalls[0].name, since: at };
+    } else {
+      stats.openToolCalls = [];
+      stats.pending = undefined;
+    }
+  } else if (message.role === 'toolResult') {
+    if (message.isError) stats.toolErrors += 1;
+    const toolCallId = message.toolCallId ?? message.id;
+    stats.openToolCalls = stats.openToolCalls.filter(call => call.id !== toolCallId);
+    if (stats.openToolCalls.length) {
+      const next = stats.openToolCalls[0];
+      stats.pending = { kind: 'tool', name: next.name, since: next.since ?? at };
+    } else stats.pending = { kind: 'model', since: at };
+  } else if (message.role === 'user') {
+    stats.openToolCalls = [];
+    stats.pending = { kind: 'model', since: at };
+  }
+}
+
+function parseTranscriptLines(lines, entries, stats) {
   for (const line of lines) {
     let entry;
     try { entry = JSON.parse(line); }
@@ -401,6 +505,7 @@ function parseTranscriptLines(lines, entries) {
     if (entry.type !== 'message') continue;
     const message = entry.message;
     if (!message) continue;
+    if (stats) updateTranscriptStats(stats, entry);
     const at = time(entry.timestamp);
     const model = text(message.model) ?? text(entry.model);
     if (message.role === 'user') {

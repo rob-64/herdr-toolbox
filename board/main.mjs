@@ -89,10 +89,13 @@ class Board {
   refreshData() {
     const loaded = this.store.load();
     let todos = this.data.todos ?? [];
+    const now = Date.now();
+    for (const task of loaded.tasks) {
+      if (task.terminal && keepTask(task, this.ui.filter, now)) this.store.attachTaskMetrics(task);
+    }
     if (this.ui.view === 'tasks') {
       const since = this.ui.filter === 'all' ? 0 : Date.now() - 2 * DAY;
       todos = this.store.loadTodos({ since, include: new Set(this.panes.bySession.keys()) });
-      const now = Date.now();
       for (const task of loaded.tasks) {
         if (keepTask(task, this.ui.filter, now)) task.todos = this.store.todosAt(task.transcript, task.id);
       }

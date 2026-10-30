@@ -124,6 +124,106 @@ test('toolArgument prefers existing keys and respects max length', () => {
   assert.equal(toolArgument({ command: 'x'.repeat(80) }, 10), 'x'.repeat(10));
 });
 
+test('transcript stats track context, errors, pending, and incremental updates', () => {
+  const agentDir = mkdtempSync(join(tmpdir(), 'omo-metrics-'));
+  const dir = mkdtempSync(join(tmpdir(), 'omo-transcript-stats-'));
+  const file = join(dir, 'session.jsonl');
+  const line = obj => `${JSON.stringify(obj)}\n`;
+  const assistantCtx = (extra = {}) => ({
+    type: 'message',
+    timestamp: '2026-10-29T12:00:00.000Z',
+    message: {
+      role: 'assistant',
+      model: 'claude-opus-5-5',
+      provider: 'anthropic-subscription',
+      usage: { contextUsage: { input: 50_000 }, input: 1, cacheRead: 2, cacheWrite: 3 },
+      content: [{ type: 'text', text: 'hi' }],
+      ...extra,
+    },
+  });
+  writeFileSync(file, line(assistantCtx()));
+  const store = new Store(agentDir);
+  let result = store.transcript(dir);
+  assert.equal(result.stats.contextTokens, 50_000);
+  assert.equal(result.stats.model, 'claude-opus-5-5');
+  assert.equal(result.stats.toolErrors, 0);
+  assert.equal(result.stats.pending, undefined);
+
+  appendFileSync(file, line({
+    type: 'message',
+    timestamp: '2026-10-29T12:01:00.000Z',
+    message: {
+      role: 'assistant',
+      model: 'claude-opus-5-5',
+      provider: 'anthropic-subscription',
+      usage: { input: 10, cacheRead: 0, cacheWrite: 0 },
+      content: [{ type: 'toolCall', id: 'c1', name: 'bash', arguments: { command: 'ls' } }],
+    },
+  }));
+  result = store.transcript(dir);
+  assert.deepEqual(result.stats.pending, { kind: 'tool', name: 'bash', since: Date.parse('2026-10-29T12:01:00.000Z') });
+
+  appendFileSync(file, line({
+    type: 'message',
+    timestamp: '2026-10-29T12:02:00.000Z',
+    message: { role: 'toolResult', toolCallId: 'c1', toolName: 'bash', isError: false, content: [{ type: 'text', text: 'ok' }] },
+  }));
+  result = store.transcript(dir);
+  assert.equal(result.stats.pending?.kind, 'model');
+  assert.equal(result.stats.toolErrors, 0);
+
+  appendFileSync(file, line({
+    type: 'message',
+    timestamp: '2026-10-29T12:03:00.000Z',
+    message: { role: 'toolResult', toolName: 'orphan', isError: true, content: [{ type: 'text', text: 'fail' }] },
+  }));
+  result = store.transcript(dir);
+  assert.equal(result.stats.toolErrors, 1);
+
+  appendFileSync(file, line({
+    type: 'message',
+    timestamp: '2026-10-29T12:04:00.000Z',
+    message: {
+      role: 'assistant',
+      model: 'claude-opus-5-5',
+      usage: { contextUsage: { input: 620_000 } },
+      content: [{ type: 'text', text: 'done' }],
+    },
+  }));
+  result = store.transcript(dir);
+  assert.equal(result.stats.contextTokens, 620_000);
+  assert.equal(result.stats.pending, undefined);
+});
+
+test('contextWindow resolves models-store and cursor limits', () => {
+  const agentDir = mkdtempSync(join(tmpdir(), 'omo-ctxwin-'));
+  writeFileSync(join(agentDir, 'models-store.json'), JSON.stringify({
+    'anthropic-subscription': [{ id: 'claude-opus-5-5', contextWindow: 1_000_000 }],
+    openai: { models: [{ id: 'gpt-5', contextWindow: 400_000 }] },
+  }));
+  writeFileSync(join(agentDir, 'cursor-context-limits.json'), JSON.stringify({ 'composer-2.5': 272_000 }));
+  const store = new Store(agentDir);
+  assert.equal(store.contextWindow('anthropic-subscription', 'claude-opus-5-5'), 1_000_000);
+  assert.equal(store.contextWindow('missing', 'gpt-5'), 400_000);
+  assert.equal(store.contextWindow(undefined, 'composer-2.5'), 272_000);
+  assert.equal(store.contextWindow(undefined, 'anthropic-subscription/claude-opus-5-5'), 1_000_000);
+  assert.equal(store.contextWindow(undefined, 'unknown-model'), undefined);
+});
+
+test('contextWindow never applies cursor caps to other providers', () => {
+  const agentDir = mkdtempSync(join(tmpdir(), 'omo-ctxwin-'));
+  writeFileSync(join(agentDir, 'models-store.json'), JSON.stringify({
+    cursor: [{ id: 'claude-opus-5-5', contextWindow: 300_000 }],
+    'github-copilot': [{ id: 'claude-opus-5.5', contextWindow: 1_000_000 }],
+  }));
+  writeFileSync(join(agentDir, 'cursor-context-limits.json'), JSON.stringify({ 'claude-haiku-5-5': 300_000 }));
+  const store = new Store(agentDir);
+  assert.equal(store.contextWindow('anthropic-subscription', 'claude-opus-5-5'), 1_000_000);
+  assert.equal(store.contextWindow('cursor', 'claude-opus-5-5'), 300_000);
+  assert.equal(store.contextWindow('anthropic-subscription', 'claude-haiku-5-5'), undefined);
+  assert.equal(store.contextWindow('cursor', 'claude-haiku-5-5'), 300_000);
+});
+
 test('toolArgument falls back to extended keys and todo op', () => {
   assert.equal(toolArgument({ file_path: '/repo/src/main.ts' }), '/repo/src/main.ts');
   assert.equal(toolArgument({ message: 'hello' }), 'hello');

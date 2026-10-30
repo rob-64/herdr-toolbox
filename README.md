@@ -155,8 +155,10 @@ The session in the herdr pane you last focused is highlighted.
 
 ### What it shows
 
-- **Agents view**: one block per OmO session, labelled with its herdr pane and title. Open OmO panes are listed even when they have no subagents, so you can see which ones are working or waiting for input. Session headers and subagent rows show agent/model-vendor icons from the same `icons` config as herdr tab titles. Each subagent shows its status, agent or category, task summary, model, elapsed time, and turns/tool calls. Running subagents get a live line with the current tool call and the latest thought. In global scope, each session lists at most 5 finished subagents; `s` shows the rest.
-- **DAG view**: each `mass ulw` / DAG run with a progress bar, then its nodes by stage with dependencies (`← build`), route, attempt, and elapsed time. Failed nodes show their error.
+- **Agents view**: one block per OmO session, labelled with its herdr pane and title. Open OmO panes are listed even when they have no subagents, so you can see which ones are working or waiting for input. Session headers and subagent rows show agent/model-vendor icons from the same `icons` config as herdr tab titles. Each subagent shows its status, agent or category, task summary, model, elapsed time, and turns/tool calls. Running tasks also show **context fill** (`ctx 62%` or `ctx 65k` when the window is unknown). **Failed tool calls** appear as `✖N` on any task. The live line under a running subagent prefixes **what it is waiting on** (`⏳ model 40s` or `⚒ bash 2m10s`) before the current tool detail and latest thought. In global scope, each session lists at most 5 finished subagents; `s` shows the rest.
+- **Tasks view**: the same context and error metrics appear on subagent tree rows (before done/total). Footer detail for a selected row includes context size and failed-tool-call counts when known.
+- **Live output viewer**: the header shows context fill, failed tools, and pending state beside `● following`.
+- **DAG view**: each `mass ulw` / DAG run with a progress bar, then its nodes by stage with dependencies (`← build`), route, attempt, and elapsed time. Node rows show `✖N` when the linked subagent had failed tool results. Failed nodes show their error.
 - **Stale detection**: a subagent still marked running whose host process is gone is flagged `!`.
 
 ### How it works

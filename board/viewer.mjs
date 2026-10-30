@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { toolArgument, transcriptFile } from './data.mjs';
-import { agentGlyph, duration, fit, icon, modelVendor, paint, seg, vendorColor, width, wrap } from './render.mjs';
+import { agentGlyph, contextFillStyle, duration, fit, formatTokenCount, icon, modelVendor, paint, seg, vendorColor, width, wrap } from './render.mjs';
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const VIEWER_HINTS = 'j/k scroll  PgUp/PgDn  g/G top/bottom  t thinking  e expand  p pane  O split  Esc back';
@@ -16,6 +16,25 @@ function displayPath(path) {
   return path.replaceAll(homedir(), '~');
 }
 
+function viewerContextLabel(task) {
+  const m = task.metrics;
+  if (!m) return undefined;
+  if (m.contextPct !== undefined && m.contextWindow && m.contextTokens !== undefined) {
+    return { text: `ctx ${m.contextPct}% (${formatTokenCount(m.contextTokens)}/${formatTokenCount(m.contextWindow)})`, style: contextFillStyle(m.contextPct) };
+  }
+  if (m.contextPct !== undefined && m.contextWindow) return { text: `ctx ${m.contextPct}%`, style: contextFillStyle(m.contextPct) };
+  if (m.contextTokens !== undefined) return { text: `ctx ${formatTokenCount(m.contextTokens)}`, style: '90' };
+  return undefined;
+}
+
+function viewerPendingLabel(task, now) {
+  const pending = task.metrics?.pending;
+  if (!pending?.since || task.terminal) return undefined;
+  const elapsedMs = now - pending.since;
+  if (pending.kind === 'model') return { text: `⏳ model ${duration(elapsedMs)}`, style: '33' };
+  return { text: `⚒ ${pending.name} ${duration(elapsedMs)}`, style: '33' };
+}
+
 function headerLine(task, columns, now, tick, following) {
   const back = seg('◂ back', '36', 'back');
   const vendor = modelVendor(task.model) ?? 'default';
@@ -25,14 +44,40 @@ function headerLine(task, columns, now, tick, following) {
   if (vGlyph) left.push(seg(`${vGlyph} `, vendorColor(vendor)));
   left.push(seg(task.agent, task.terminal ? '90' : '36'), seg(' · '));
   const stats = [task.turns !== undefined ? `t${task.turns}` : '', task.toolCalls !== undefined ? `⚒${task.toolCalls}` : ''].filter(Boolean).join(' ');
-  const rightParts = [shortModel(task.model), elapsed(task, now), stats, following ? '● following' : ''].filter(Boolean);
-  const rightText = rightParts.join('  ');
-  const rightW = width(rightText) + 2;
+  const ctx = viewerContextLabel(task);
+  const errors = task.metrics?.toolErrors > 0 ? `✖${task.metrics.toolErrors} failed` : undefined;
+  const pending = viewerPendingLabel(task, now);
+  const followParts = [];
+  if (pending) followParts.push(pending.text);
+  if (following) followParts.push('● following');
+  const rightMeta = [
+    shortModel(task.model),
+    elapsed(task, now),
+    stats,
+    ctx?.text,
+    errors,
+    followParts.length ? followParts.join('  ') : '',
+  ].filter(Boolean);
+  const rightSegments = [];
+  rightMeta.forEach((part, index) => {
+    if (index) rightSegments.push(seg('  ', '90'));
+    if (ctx && part === ctx.text) rightSegments.push(seg(part, ctx.style));
+    else if (pending && part === pending.text) rightSegments.push(seg(part, pending.style));
+    else if (errors && part === errors) rightSegments.push(seg(part, '31'));
+    else if (part.includes('● following')) {
+      const before = part.replace(/\s*● following$/, '').trim();
+      if (before) rightSegments.push(seg(before, '33'));
+      rightSegments.push(seg('  ', '90'));
+      rightSegments.push(seg('● following', '90'));
+    } else rightSegments.push(seg(part, '90'));
+  });
+  const rightText = rightMeta.join('  ');
+  const rightW = rightSegments.reduce((n, part) => n + width(part.text), 0) || width(rightText);
   const fixed = width(back.text) + 1 + 2 + 1 + vendorExtra + 16 + 3;
-  const summaryW = Math.max(8, columns - fixed - rightW);
+  const summaryW = Math.max(8, columns - fixed - rightW - 2);
   left.push(seg(fit(task.summary, summaryW), task.terminal ? '90' : '1'));
   const leftW = left.reduce((n, part) => n + width(part.text), 0);
-  const line = [...left, seg(' '.repeat(Math.max(1, columns - leftW - width(rightText))), ''), seg(rightText, '90')];
+  const line = [...left, seg(' '.repeat(Math.max(1, columns - leftW - rightW)), ''), ...(rightSegments.length ? rightSegments : [seg(rightText, '90')])];
   return [line, [seg('─'.repeat(columns), '90')]];
 }
 
@@ -146,7 +191,8 @@ export class Viewer {
 
   refresh() {
     const loaded = this.store.load();
-    const task = loaded.tasks.find(item => item.id === this.taskId) ?? this.task;
+    let task = loaded.tasks.find(item => item.id === this.taskId) ?? this.task;
+    if (!task.metrics) this.store.attachTaskMetrics(task);
     this.task = task;
     const result = this.store.transcript(task.transcript);
     this.entries = result.entries;

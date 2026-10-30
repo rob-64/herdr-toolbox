@@ -194,6 +194,93 @@ const ago = (now, at) => (at ? `${duration(now - at).replace(/(\d+[a-z]+).*/, '$
 const shortModel = model => (model ? model.split('/').pop() : '');
 const elapsed = (item, now) => (item.startedAt ? duration((item.endedAt ?? now) - item.startedAt) : '');
 
+export function formatTokenCount(tokens) {
+  if (!Number.isFinite(tokens) || tokens < 0) return '';
+  if (tokens >= 1_000_000) {
+    const m = tokens / 1_000_000;
+    return `${m >= 10 ? Math.round(m) : m.toFixed(1).replace(/\.0$/, '')}M`;
+  }
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`;
+  return String(Math.round(tokens));
+}
+
+export function contextFillStyle(pct) {
+  if (pct < 60) return '90';
+  if (pct <= 85) return '33';
+  return '31';
+}
+
+function contextMetricPart(task) {
+  const m = task.metrics;
+  if (task.terminal || !m) return undefined;
+  if (m.contextPct !== undefined && m.contextWindow) return { text: `ctx ${m.contextPct}%`, style: contextFillStyle(m.contextPct) };
+  if (m.contextTokens !== undefined) return { text: `ctx ${formatTokenCount(m.contextTokens)}`, style: '90' };
+  return undefined;
+}
+
+function errorMetricPart(task) {
+  const n = task.metrics?.toolErrors ?? 0;
+  return n > 0 ? { text: `✖${n}`, style: '31' } : undefined;
+}
+
+function taskStatsPieces(task) {
+  const pieces = [];
+  if (task.turns !== undefined) pieces.push({ text: `t${task.turns}`, style: '90' });
+  if (task.toolCalls !== undefined) pieces.push({ text: `⚒${task.toolCalls}`, style: '90' });
+  const ctx = contextMetricPart(task);
+  if (ctx) pieces.push(ctx);
+  const err = errorMetricPart(task);
+  if (err) pieces.push(err);
+  return pieces;
+}
+
+function fitTaskStatsSegments(task, maxW) {
+  let pieces = taskStatsPieces(task);
+  while (pieces.length > 1) {
+    const joined = pieces.map(part => part.text).join(' ');
+    if (width(joined) <= maxW) break;
+    pieces.shift();
+  }
+  if (!pieces.length) return [seg(' '.repeat(maxW), '90')];
+  const out = [];
+  pieces.forEach((part, index) => {
+    if (index) out.push(seg(' ', '90'));
+    out.push(seg(part.text, part.style));
+  });
+  const used = out.reduce((n, part) => n + width(part.text), 0);
+  if (used < maxW) out.unshift(seg(' '.repeat(maxW - used), '90'));
+  return out;
+}
+
+function subagentMetricText(task) {
+  const bits = [];
+  const ctx = contextMetricPart(task);
+  if (ctx) bits.push(ctx.text);
+  const err = errorMetricPart(task);
+  if (err) bits.push(err.text);
+  return bits.length ? `${bits.join(' ')} ` : '';
+}
+
+function pendingPrefix(task, now) {
+  const pending = task.metrics?.pending;
+  if (!pending?.since) return null;
+  const elapsedMs = now - pending.since;
+  if (pending.kind === 'model') return { text: `⏳ model ${duration(elapsedMs)}`, style: '33' };
+  return { text: `⚒ ${pending.name} ${duration(elapsedMs)}`, style: '33' };
+}
+
+export function taskDetailExtras(task) {
+  const parts = [];
+  const m = task.metrics;
+  if (m?.contextTokens !== undefined && m.contextWindow) {
+    parts.push(`ctx ${formatTokenCount(m.contextTokens)}/${formatTokenCount(m.contextWindow)}`);
+  } else if (m?.contextTokens !== undefined) {
+    parts.push(`ctx ${formatTokenCount(m.contextTokens)}`);
+  }
+  if (m?.toolErrors > 0) parts.push(`${m.toolErrors} failed tool call${m.toolErrors === 1 ? '' : 's'}`);
+  return parts.length ? ` · ${parts.join(' · ')}` : '';
+}
+
 export function keepTask(task, filter, now) {
   if (filter === 'all') return true;
   if (!task.terminal) return true;
@@ -299,17 +386,16 @@ function taskRow(task, level, columns, now, tick, dagTag) {
   const agentW = 16;
   const modelW = columns >= 120 ? 22 : columns >= 96 ? 16 : 0;
   const timeW = 8;
-  const statsW = columns >= 110 ? 12 : 0;
+  const statsW = columns >= 110 ? 18 : columns >= 96 ? 14 : columns >= 80 ? 10 : 0;
   const { segs: vendorSegs, extra: vendorExtra } = modelIconParts(task.model);
   const fixed = width(indent) + 2 + vendorExtra + agentW + 1 + (modelW ? modelW + 1 : 0) + timeW + 1 + (statsW ? statsW : 0);
   const summaryW = Math.max(10, columns - fixed - 1);
   const summary = dagTag ? `⧉ ${dagTag}  ${task.summary}` : task.summary;
-  const stats = [task.turns !== undefined ? `t${task.turns}` : '', task.toolCalls !== undefined ? `⚒${task.toolCalls}` : ''].filter(Boolean).join(' ');
   const row = [seg(indent), icon(task.status, tick), seg(' '), ...vendorSegs, seg(fit(task.agent, agentW), task.terminal ? '90' : '36'), seg(' '),
     seg(fit(summary, summaryW), task.terminal ? '' : '1')];
   if (modelW) row.push(seg(' '), seg(fit(shortModel(task.model), modelW), '90'));
   row.push(seg(' '), seg(fit(elapsed(task, now), timeW, 'right'), task.terminal ? '90' : '33'));
-  if (statsW) row.push(seg(' '), seg(fit(stats, statsW - 1, 'right'), '90'));
+  if (statsW) row.push(seg(' '), ...fitTaskStatsSegments(task, statsW - 1));
   return row;
 }
 
@@ -318,9 +404,15 @@ function detailRow(level, text, style) {
 }
 
 function progressText(task, now) {
-  if (!task.tool && !task.line) return null;
+  const pending = pendingPrefix(task, now);
+  const detail = [task.tool ? `[${task.tool}]` : '', task.line ?? ''].filter(Boolean).join(' ');
+  if (!pending && !detail) return null;
+  if (pending) {
+    const tail = detail ? ` ${detail}` : '';
+    return { text: `${pending.text}${tail}`, style: pending.style, prefix: true };
+  }
   const quiet = task.lastAt && now - task.lastAt > 15000 ? `  · quiet ${duration(now - task.lastAt)}` : '';
-  return [task.tool ? `[${task.tool}]` : '', task.line ?? ''].filter(Boolean).join(' ') + quiet;
+  return { text: detail + quiet, style: '2' };
 }
 
 function todoBar(done, total, size = 12) {
@@ -565,9 +657,11 @@ function appendSubagentRows(ctx, task, depth, lastFlags, ancestorTerminal) {
   const prefix = treePrefix(depth, lastFlags);
   const closed = isTaskFolded(folded, foldKey, defaultFold);
   const counts = todoDoneTotal(phases);
-  const stats = counts.total ? `${counts.done}/${counts.total}` : '—';
+  const metricPrefix = subagentMetricText(task);
+  const doneTotal = counts.total ? `${counts.done}/${counts.total}` : '—';
   const timeW = 8;
-  const statsW = 6;
+  const statsW = 14;
+  const stats = fit(`${metricPrefix}${doneTotal}`.trim(), statsW, 'right');
   const lead = prefix + branch;
   const caret = foldCaret(folded, foldKey, defaultFold, phases.length > 0 || childTasks.length > 0);
   const elapsedText = elapsed(task, now);
@@ -590,7 +684,7 @@ function appendSubagentRows(ctx, task, depth, lastFlags, ancestorTerminal) {
     parentKey: ctx.parentKey,
     target: { sessionId: session.id, taskId: task.id },
     segments: rowSeg,
-    detail: `${task.id} · ${task.agent} · ${task.model ?? 'model ?'} · ${task.status}${task.costUsd ? ` · $${task.costUsd.toFixed(2)}` : ''} · ${task.summary}`,
+    detail: `${task.id} · ${task.agent} · ${task.model ?? 'model ?'} · ${task.status}${task.costUsd ? ` · $${task.costUsd.toFixed(2)}` : ''}${taskDetailExtras(task)} · ${task.summary}`,
   });
   if (closed) return;
   const nextFlags = lastFlags.slice();
@@ -762,16 +856,19 @@ function dagRows(run, session, tasksById, columns, now, tick, showSession, activ
       const routeW = columns >= 100 ? 16 : 0;
       const timeW = 9;
       const { segs: vendorSegs, extra: vendorExtra } = task ? modelIconParts(task.model) : { segs: [], extra: 0 };
-      const summaryW = Math.max(8, columns - width(rail) - 2 - vendorExtra - idW - 1 - (routeW ? routeW + 1 : 0) - timeW - 2);
+      const errPart = errorMetricPart(task);
+      const errW = errPart ? width(errPart.text) + 1 : 0;
+      const summaryW = Math.max(8, columns - width(rail) - 2 - vendorExtra - idW - 1 - (routeW ? routeW + 1 : 0) - timeW - 2 - errW);
       const nodeElapsed = node.startedAt ? duration((node.endedAt ?? (TERMINAL.has(node.state) ? node.startedAt : now)) - node.startedAt) : '';
+      const errText = errPart ? `${errPart.text} ` : '';
       const segments = [seg(rail, '90'), icon(node.state, tick), seg(' '), ...vendorSegs, seg(fit(node.id, Math.min(idW, width(node.id))), TERMINAL.has(node.state) ? '' : '1'),
         seg(fit(deps, Math.max(0, idW - width(node.id))), '90'), seg(' '), seg(fit(node.summary, summaryW), TERMINAL.has(node.state) ? '90' : '')];
       if (routeW) segments.push(seg(' '), seg(fit(node.route ?? task?.agent ?? '', routeW), '36'));
-      segments.push(seg(' '), seg(fit(node.attempt > 1 ? `#${node.attempt} ${nodeElapsed}` : nodeElapsed, timeW, 'right'), node.state === 'running' ? '33' : '90'));
+      segments.push(seg(' '), seg(fit(`${errText}${node.attempt > 1 ? `#${node.attempt} ${nodeElapsed}` : nodeElapsed}`.trim(), timeW, 'right'), node.state === 'running' ? '33' : '90'));
       rows.push({ key: `node:${run.id}:${node.id}`, target: { sessionId: session.id, taskId: node.taskId }, segments,
         detail: `${node.id} [${node.state}] ${node.summary}${node.taskId ? ` · ${node.taskId}` : ''}${task?.model ? ` · ${task.model}` : ''}` });
       const progress = task && !task.terminal ? progressText(task, now) : null;
-      if (progress) rows.push({ segments: [seg(rail, '90'), seg('    └ ', '90'), seg(progress, '2')] });
+      if (progress) rows.push({ segments: [seg(rail, '90'), seg('    └ ', '90'), seg(progress.text, progress.style)] });
       if (node.error && (node.state === 'failed' || node.state === 'cancelled')) rows.push({ segments: [seg(rail, '90'), seg('    └ ', '90'), seg(node.error, '31')] });
     }
   });
@@ -815,9 +912,12 @@ export function buildView(data, panes, ui, now, columns, tick = 0) {
         if (task.terminal && level === 0 && ++finished > finishedLimit) { hidden += 1; continue; }
         if (task.terminal && level > 0 && finished > finishedLimit) continue;
         rows.push({ key: `task:${task.id}`, target: { sessionId: session.id, taskId: task.id }, segments: taskRow(task, level, columns, now, tick, dagByTask.get(task.id)),
-          detail: `${task.id} · ${task.agent} · ${task.model ?? 'model ?'} · ${task.status}${task.costUsd ? ` · $${task.costUsd.toFixed(2)}` : ''} · ${task.summary}` });
+          detail: `${task.id} · ${task.agent} · ${task.model ?? 'model ?'} · ${task.status}${task.costUsd ? ` · $${task.costUsd.toFixed(2)}` : ''}${taskDetailExtras(task)} · ${task.summary}` });
         const progress = !task.terminal ? progressText(task, now) : null;
-        if (progress) rows.push({ segments: detailRow(level, progress, '2') });
+        if (progress) {
+          if (progress.prefix) rows.push({ segments: [seg('  '.repeat(level + 1) + '   '), seg('└ ', '90'), seg(progress.text, progress.style)] });
+          else rows.push({ segments: detailRow(level, progress.text, progress.style) });
+        }
         if (task.status === 'stale') rows.push({ segments: detailRow(level, 'host process is gone; this task will not finish', '33') });
         if (task.error && ['error', 'failed'].includes(task.status)) rows.push({ segments: detailRow(level, task.error, '31') });
       }

@@ -161,9 +161,9 @@ test('Viewer tool line uses single space between name and summary', () => {
   viewer.refresh();
   const columns = 110;
   const plain = viewer.frame(columns, 20, 0).map(line => line.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, ''));
-  const toolLine = plain.find(line => line.includes('⚒ read'));
+  const toolLine = plain.find(line => line.includes('ci.yml'));
   assert.ok(toolLine, plain.join('\n'));
-  assert.match(toolLine, /^⚒ read \S/);
+  assert.match(toolLine.trimStart(), /^⚒ read \S/);
   assert.doesNotMatch(toolLine, /⚒ read {2,}/);
   assert.ok(toolLine.includes('ci.yml'));
 });

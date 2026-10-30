@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { buildView, duration, expandAllTaskFolds, header, isTaskFolded, modelVendor, paint, setIconConfig, toggleTaskFold, width } from './render.mjs';
+import { buildView, contextFillStyle, duration, expandAllTaskFolds, formatTokenCount, header, isTaskFolded, modelVendor, paint, setIconConfig, toggleTaskFold, width } from './render.mjs';
 import { iconFor } from '../tabs/labels.mjs';
 
 afterEach(() => setIconConfig(undefined));
@@ -279,6 +279,96 @@ test('tasks session header pluralizes subagent count', () => {
   assert.doesNotMatch(rowText(buildView({ todos, tasks: oneTask, runs: [] }, panes, oneUi, now, 120)), /1 subagents/);
   const twoUi = { ...oneUi };
   assert.match(rowText(buildView({ todos, tasks: treeTasks.slice(0, 2), runs: [] }, panes, twoUi, now, 120)), /2 subagents/);
+});
+
+test('context metric formatting and colour thresholds', () => {
+  assert.equal(formatTokenCount(65_000), '65k');
+  assert.equal(formatTokenCount(1_500_000), '1.5M');
+  assert.equal(contextFillStyle(59), '90');
+  assert.equal(contextFillStyle(60), '33');
+  assert.equal(contextFillStyle(85), '33');
+  assert.equal(contextFillStyle(86), '31');
+});
+
+test('agents view shows ctx, errors, and pending live line', () => {
+  const tasks = [{
+    id: 'metrics-running',
+    status: 'running',
+    terminal: false,
+    sessionId,
+    rootSessionId: sessionId,
+    agent: 'explore',
+    model: 'claude-opus-5-5',
+    summary: 'Scan repo',
+    startedAt: now - 120_000,
+    updatedAt: now - 5000,
+    turns: 4,
+    toolCalls: 2,
+    tool: 'bash ls',
+    line: 'Checking files',
+    metrics: {
+      contextTokens: 650_000,
+      contextWindow: 1_000_000,
+      contextPct: 65,
+      toolErrors: 3,
+      pending: { kind: 'tool', name: 'bash', since: now - 130_000 },
+    },
+  }];
+  const ui = { view: 'agents', scope: 'global', filter: 'all', sessionId, activeSessionId: undefined };
+  const view = buildView({ todos: [], tasks, runs: [] }, panes, ui, now, 120);
+  const text = rowText(view);
+  assert.match(text, /ctx 65%/);
+  assert.match(text, /✖3/);
+  assert.match(text, /⚒ bash 2m10s/);
+  assert.match(text, /\[bash ls\]/);
+  assert.doesNotMatch(text, /quiet/);
+
+  const fallbackTask = [{ ...tasks[0], metrics: { contextTokens: 65_000, toolErrors: 0, pending: { kind: 'model', since: now - 40_000 } } }];
+  const fallbackView = buildView({ todos: [], tasks: fallbackTask, runs: [] }, panes, ui, now, 120);
+  assert.match(rowText(fallbackView), /ctx 65k/);
+  assert.match(rowText(fallbackView), /⏳ model 40s/);
+});
+
+test('metrics rows stay within width at 80, 100, and 120 columns', () => {
+  const heavy = {
+    id: 'metrics-wide',
+    status: 'running',
+    terminal: false,
+    sessionId,
+    rootSessionId: sessionId,
+    agent: 'plan-reviewer',
+    model: 'anthropic-subscription/claude-opus-5-5',
+    summary: 'y'.repeat(200),
+    startedAt: now - 300_000,
+    updatedAt: now - 1000,
+    turns: 99,
+    toolCalls: 88,
+    tool: 'read path',
+    line: 'Still reading',
+    metrics: {
+      contextTokens: 900_000,
+      contextWindow: 1_000_000,
+      contextPct: 90,
+      toolErrors: 12,
+      pending: { kind: 'tool', name: 'read', since: now - 5000 },
+    },
+  };
+  const ui = { view: 'agents', scope: 'global', filter: 'all', sessionId, activeSessionId: undefined };
+  for (const cols of [80, 100, 120]) {
+    const view = buildView({ todos: [], tasks: [heavy], runs: [] }, panes, ui, now, cols);
+    for (const w of rowWidths(view)) assert.ok(w <= cols, `agents width ${w} > ${cols}`);
+  }
+  const tasksUi = { view: 'tasks', scope: 'global', filter: 'all', status: 'all', sessionId, activeSessionId: undefined, folded: new Map() };
+  const treeTask = {
+    ...heavy,
+    id: 'metrics-tree',
+    childSessionId: 'child-metrics',
+    todos: { phases: [{ name: 'Work', tasks: [{ content: 'Step', status: 'in_progress' }] }] },
+  };
+  for (const cols of [80, 100, 120]) {
+    const view = buildView({ todos: [{ ...todos[0], phases: [] }], tasks: [treeTask], runs: [] }, panes, tasksUi, now, cols);
+    for (const w of rowWidths(view)) assert.ok(w <= cols, `tasks width ${w} > ${cols}`);
+  }
 });
 
 test('tasks global scope caps terminal roots and shows more row', () => {
