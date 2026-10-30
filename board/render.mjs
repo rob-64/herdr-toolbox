@@ -2,7 +2,16 @@ import { stages, TERMINAL } from './data.mjs';
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
 export const FILTERS = ['active', 'today', 'all'];
+export const STATUS_FILTERS = ['all', 'open', 'in_progress', 'pending', 'completed', 'abandoned'];
+
+const TODO_GLYPH = {
+  pending: ['○', '90', 'todo'],
+  in_progress: ['◐', '1;33', 'in progress'],
+  completed: ['✔', '32', 'done'],
+  abandoned: ['⊘', '9;90', 'abandoned'],
+};
 
 const STATUS = {
   running: ['', '33'], starting: ['○', '33'], retrying: ['↻', '33'],
@@ -82,7 +91,7 @@ const ago = (now, at) => (at ? `${duration(now - at).replace(/(\d+[a-z]+).*/, '$
 const shortModel = model => (model ? model.split('/').pop() : '');
 const elapsed = (item, now) => (item.startedAt ? duration((item.endedAt ?? now) - item.startedAt) : '');
 
-function keepTask(task, filter, now) {
+export function keepTask(task, filter, now) {
   if (filter === 'all') return true;
   if (!task.terminal) return true;
   return filter === 'today' && now - (task.endedAt ?? task.updatedAt) < DAY;
@@ -210,6 +219,411 @@ function progressText(task, now) {
   return [task.tool ? `[${task.tool}]` : '', task.line ?? ''].filter(Boolean).join(' ') + quiet;
 }
 
+function todoBar(done, total, size = 12) {
+  const denom = total || 1;
+  const a = Math.round((done / denom) * size);
+  return [seg('█'.repeat(a), '32'), seg('░'.repeat(Math.max(0, size - a)), '90')];
+}
+
+function todoGlyph(status) {
+  const [glyph, color, label] = TODO_GLYPH[status] ?? TODO_GLYPH.pending;
+  return { glyph, color, label, segments: [seg(glyph, color)] };
+}
+
+function itemVisible(status, filter) {
+  if (filter === 'all') return true;
+  if (filter === 'open') return status === 'pending' || status === 'in_progress';
+  return status === filter;
+}
+
+function openItem(task) {
+  return task.status === 'pending' || task.status === 'in_progress';
+}
+
+function countTodoItems(phases) {
+  const total = { in_progress: 0, pending: 0, completed: 0, abandoned: 0 };
+  for (const phase of phases ?? []) {
+    for (const task of phase.tasks) {
+      if (task.status === 'in_progress') total.in_progress += 1;
+      else if (task.status === 'pending') total.pending += 1;
+      else if (task.status === 'completed') total.completed += 1;
+      else if (task.status === 'abandoned') total.abandoned += 1;
+    }
+  }
+  return total;
+}
+
+function phaseAllDone(phase) {
+  return phase.tasks.length > 0 && phase.tasks.every(task => task.status === 'completed' || task.status === 'abandoned');
+}
+
+function todoDoneTotal(phases) {
+  let done = 0;
+  let total = 0;
+  for (const phase of phases ?? []) {
+    for (const task of phase.tasks) {
+      total += 1;
+      if (task.status === 'completed') done += 1;
+    }
+  }
+  return { done, total };
+}
+
+export function isTaskFolded(folded, key, defaultValue) {
+  return folded.has(key) ? folded.get(key) : defaultValue;
+}
+
+export function toggleTaskFold(folded, key, defaultValue) {
+  const next = new Map(folded);
+  next.set(key, !isTaskFolded(folded, key, defaultValue));
+  return next;
+}
+
+export function setTaskFold(folded, key, value) {
+  const next = new Map(folded);
+  next.set(key, value);
+  return next;
+}
+
+export function foldAllTaskFolds(folded, keys) {
+  const next = new Map(folded);
+  for (const key of keys) next.set(key, true);
+  return next;
+}
+
+export function expandAllTaskFolds(folded, keys) {
+  const next = new Map(folded);
+  for (const key of keys) next.set(key, false);
+  return next;
+}
+
+function sortSubagents(tasks) {
+  return tasks.slice().sort((a, b) => Number(a.terminal) - Number(b.terminal) || (b.startedAt ?? 0) - (a.startedAt ?? 0));
+}
+
+function linkSessionTasks(tasks) {
+  const byChild = new Map(tasks.filter(task => task.childSessionId).map(task => [task.childSessionId, task]));
+  const children = new Map();
+  const roots = [];
+  for (const task of tasks) {
+    const parent = byChild.get(task.sessionId);
+    if (parent && parent !== task) {
+      if (!children.has(parent.id)) children.set(parent.id, []);
+      children.get(parent.id).push(task);
+    } else roots.push(task);
+  }
+  for (const [id, list] of children) children.set(id, sortSubagents(list));
+  return { roots: sortSubagents(roots), children };
+}
+
+function treePrefix(depth, lastFlags) {
+  let out = '';
+  for (let i = 0; i < depth; i++) out += lastFlags[i] ? '  ' : '│ ';
+  return out;
+}
+
+function foldCaret(folded, key, defaultValue, hasChildren) {
+  if (!hasChildren) return seg('  ', '90');
+  const closed = isTaskFolded(folded, key, defaultValue);
+  return seg(closed ? '▸' : '▾', '90');
+}
+
+function todoSessionLabel(session) {
+  if (session.pane) return sessionLabel(session);
+  const name = session.name ?? session.id.slice(0, 8);
+  return `${session.project ?? 'omo'} · ${name}`;
+}
+
+function keepTodoSession(session, filter, now) {
+  const live = Boolean(session.pane);
+  const recent = now - (session.updatedAt ?? 0) < DAY;
+  const open = (session.phases ?? []).some(phase => phase.tasks.some(openItem));
+  if (filter === 'all') return true;
+  if (filter === 'today') return recent || live;
+  if (filter === 'active') return open && (live || recent);
+  return true;
+}
+
+function sortTodoSessions(a, b) {
+  const aProg = Number((a.phases ?? []).some(phase => phase.tasks.some(task => task.status === 'in_progress')));
+  const bProg = Number((b.phases ?? []).some(phase => phase.tasks.some(task => task.status === 'in_progress')));
+  if (bProg !== aProg) return bProg - aProg;
+  const aLive = Number(Boolean(a.pane));
+  const bLive = Number(Boolean(b.pane));
+  if (bLive !== aLive) return bLive - aLive;
+  return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+}
+
+function todoSessionHeader(session, now, tick, columns, active, { ownDone, ownTotal, subagents, subRunning } = {}) {
+  const live = session.pane;
+  const status = live?.agentStatus;
+  const parts = [seg('▍', active ? '1;35' : live ? '36' : '90'), seg(todoSessionLabel(session), active ? '1;35' : '1')];
+  parts.push(seg('  '));
+  if (live) parts.push(status === 'working' ? seg(`${SPINNER[tick % SPINNER.length]} working`, '33') : status === 'blocked' ? seg('◇ needs input', '35') : seg(`● ${status ?? 'live'}`, '36'));
+  else parts.push(seg('○ closed', '90'));
+  if (ownTotal) parts.push(seg('  '), ...todoBar(ownDone, ownTotal), seg(` ${ownDone}/${ownTotal} done`, '90'));
+  if (subagents) {
+    const word = subagents === 1 ? 'subagent' : 'subagents';
+    const sub = subRunning ? `${subagents} ${word} (${subRunning} running)` : `${subagents} ${word}`;
+    parts.push(seg(` · ${sub}`, '90'));
+  }
+  if (live?.title && !todoSessionLabel(session).includes(live.title)) parts.push(seg(`  ${live.title}`, '90'));
+  parts.push(seg(`  ${ago(now, session.updatedAt)}`, '90'));
+  return parts;
+}
+
+function activePhaseIndex(phases) {
+  for (let i = 0; i < phases.length; i++) {
+    if (phases[i].tasks.some(task => task.status === 'in_progress')) return i;
+  }
+  for (let i = 0; i < phases.length; i++) {
+    if (phases[i].tasks.some(openItem)) return i;
+  }
+  return 0;
+}
+
+function subagentHasVisibleDescendants(task, children, statusFilter) {
+  for (const phase of task.todos?.phases ?? []) {
+    if (phase.tasks.some(item => itemVisible(item.status, statusFilter))) return true;
+  }
+  for (const child of children.get(task.id) ?? []) {
+    if (statusFilter === 'all' || subagentHasVisibleDescendants(child, children, statusFilter)) return true;
+  }
+  return false;
+}
+
+function appendPhaseRows(ctx, phases, phaseScope, depth, lastFlags, ancestorTerminal) {
+  const { session, rows, ui, statusFilter, columns, folded, foldKeys, boldPhase } = ctx;
+  const visiblePhases = [];
+  for (let phaseIndex = 0; phaseIndex < phases.length; phaseIndex++) {
+    const phase = phases[phaseIndex];
+    const visibleTasks = phase.tasks.map((task, itemIndex) => ({ task, itemIndex })).filter(({ task }) => itemVisible(task.status, statusFilter));
+    if (visibleTasks.length) visiblePhases.push({ phase, phaseIndex, visibleTasks });
+  }
+  visiblePhases.forEach(({ phase, phaseIndex, visibleTasks }, index) => {
+    const isLast = index === visiblePhases.length - 1 && !ctx.pendingAfterPhases;
+    const branch = isLast ? '└ ' : '├ ';
+    const prefix = treePrefix(depth, lastFlags);
+    const foldKey = `phase:${phaseScope}:${phaseIndex}`;
+    const defaultFold = phaseAllDone(phase) || (ancestorTerminal && ui.scope === 'global');
+    foldKeys.add(foldKey);
+    const hasChildren = visibleTasks.length > 0;
+    const closed = isTaskFolded(folded, foldKey, defaultFold);
+    const done = phase.tasks.filter(task => task.status === 'completed').length;
+    const phaseStyle = phaseIndex === boldPhase ? '1' : '90';
+    const caret = foldCaret(folded, foldKey, defaultFold, hasChildren);
+    rows.push({
+      key: foldKey,
+      foldKey,
+      foldDefault: defaultFold,
+      foldToggleTo: width(prefix + branch) + width(caret.text),
+      parentKey: ctx.parentKey,
+      target: { sessionId: session.id },
+      segments: [seg(prefix + branch, '90'), caret, seg(` ${phase.name || 'phase'}`, phaseStyle), seg(`  ${done}/${phase.tasks.length}`, '90')],
+    });
+    if (closed || !hasChildren) return;
+    const nextFlags = lastFlags.slice();
+    nextFlags[depth] = isLast;
+    visibleTasks.forEach(({ task, itemIndex }, itemPos) => {
+      const itemLast = itemPos === visibleTasks.length - 1;
+      const itemBranch = itemLast ? '└ ' : '├ ';
+      const itemPrefix = treePrefix(depth + 1, nextFlags);
+      const { label, segments: iconSeg } = todoGlyph(task.status);
+      const lead = itemPrefix + itemBranch;
+      const contentStyle = task.status === 'in_progress' ? '1' : (task.status === 'completed' || task.status === 'abandoned') ? '90' : '';
+      const strike = task.status === 'abandoned' ? '9' : '';
+      const measureSegs = [seg(lead, '90'), ...iconSeg, seg(' '), seg('', strike || contentStyle)];
+      const used = measureSegs.reduce((n, s) => n + width(s.text), 0);
+      const contentW = Math.max(8, columns - used);
+      rows.push({
+        key: `todo:${phaseScope}:${phaseIndex}:${itemIndex}`,
+        parentKey: foldKey,
+        target: { sessionId: session.id },
+        segments: [seg(lead, '90'), ...iconSeg, seg(' '), seg(fit(task.content, contentW), strike || contentStyle)],
+        detail: `${label} · ${phase.name || 'phase'} · ${task.content}`,
+      });
+    });
+  });
+}
+
+function appendSubagentRows(ctx, task, depth, lastFlags, ancestorTerminal) {
+  const { session, rows, ui, now, tick, columns, folded, foldKeys, statusFilter, children } = ctx;
+  const foldKey = `subagent:${session.id}:${task.id}`;
+  const defaultFold = task.terminal || (ancestorTerminal && ui.scope === 'global');
+  foldKeys.add(foldKey);
+  const childTasks = children.get(task.id) ?? [];
+  const phases = task.todos?.phases ?? [];
+  const hasChildren = phases.some(phase => phase.tasks.some(item => itemVisible(item.status, statusFilter)))
+    || childTasks.some(child => statusFilter === 'all' || subagentHasVisibleDescendants(child, children, statusFilter));
+  if (statusFilter !== 'all' && !hasChildren && !subagentHasVisibleDescendants(task, children, statusFilter)) return;
+  const isLast = ctx.nextIsLast;
+  const branch = isLast ? '└ ' : '├ ';
+  const prefix = treePrefix(depth, lastFlags);
+  const closed = isTaskFolded(folded, foldKey, defaultFold);
+  const counts = todoDoneTotal(phases);
+  const stats = counts.total ? `${counts.done}/${counts.total}` : '—';
+  const timeW = 8;
+  const statsW = 6;
+  const lead = prefix + branch;
+  const caret = foldCaret(folded, foldKey, defaultFold, phases.length > 0 || childTasks.length > 0);
+  const elapsedText = elapsed(task, now);
+  const buildRowSeg = (summary, summaryWidth) => {
+    const summaryStyle = task.terminal ? '90' : '1';
+    return [seg(lead, '90'), caret, seg(' '),
+      icon(task.status, tick), seg(' '), seg(fit(task.agent, 16), task.terminal ? '90' : '36'), seg(' · '), seg(fit(summary, summaryWidth), summaryStyle),
+      seg(' '), seg(fit(stats, statsW, 'right'), '90'), seg(' '), seg(fit(elapsedText, timeW, 'right'), task.terminal ? '90' : '33')];
+  };
+  const measureSegs = buildRowSeg('', 0);
+  const used = measureSegs.reduce((n, s) => n + width(s.text), 0);
+  const summaryW = Math.max(10, columns - used);
+  const rowSeg = buildRowSeg(task.summary, summaryW);
+  rows.push({
+    key: foldKey,
+    foldKey,
+    foldDefault: defaultFold,
+    foldToggleTo: width(lead) + width(caret.text),
+    parentKey: ctx.parentKey,
+    target: { sessionId: session.id, taskId: task.id },
+    segments: rowSeg,
+    detail: `${task.id} · ${task.agent} · ${task.model ?? 'model ?'} · ${task.status}${task.costUsd ? ` · $${task.costUsd.toFixed(2)}` : ''} · ${task.summary}`,
+  });
+  if (closed) return;
+  const nextFlags = lastFlags.slice();
+  nextFlags[depth] = isLast;
+  const nextTerminal = ancestorTerminal || task.terminal;
+  if (phases.length) {
+    appendPhaseRows({ ...ctx, parentKey: foldKey, pendingAfterPhases: childTasks.length > 0, phaseScope: task.id, boldPhase: activePhaseIndex(phases) }, phases, task.id, depth + 1, nextFlags, nextTerminal);
+  }
+  childTasks.forEach((child, index) => {
+    appendSubagentRows({ ...ctx, parentKey: foldKey, nextIsLast: index === childTasks.length - 1 }, child, depth + 1, nextFlags, nextTerminal);
+  });
+}
+
+function todoView(data, panes, ui, now, columns, tick) {
+  const folded = ui.folded ?? new Map();
+  const byId = new Map((data.todos ?? []).map(todo => [todo.id, { ...todo, pane: panes?.bySession?.get(todo.id) }]));
+  const tasksByRoot = new Map();
+  for (const task of data.tasks ?? []) {
+    if (!keepTask(task, ui.filter, now)) continue;
+    const root = task.rootSessionId ?? task.sessionId ?? 'unknown';
+    if (!tasksByRoot.has(root)) tasksByRoot.set(root, []);
+    tasksByRoot.get(root).push(task);
+  }
+  for (const [sessionId, pane] of panes?.bySession ?? []) {
+    if (!byId.has(sessionId)) byId.set(sessionId, { id: sessionId, project: pane.title ?? 'omo', name: undefined, phases: [], updatedAt: 0, pane });
+  }
+  for (const rootId of tasksByRoot.keys()) {
+    if (!byId.has(rootId)) {
+      const sample = tasksByRoot.get(rootId)[0];
+      byId.set(rootId, { id: rootId, project: sample?.project ?? 'omo', name: undefined, phases: [], updatedAt: 0, pane: panes?.bySession?.get(rootId) });
+    }
+  }
+  const all = [...byId.values()];
+  const sessionList = all.filter(session => {
+    const hasTodos = session.phases?.some(phase => phase.tasks.length);
+    const hasSubs = (tasksByRoot.get(session.id)?.length ?? 0) > 0;
+    return hasTodos || hasSubs || session.pane;
+  });
+  const filtered = all.filter(session => {
+    const hasTodos = session.phases?.some(phase => phase.tasks.length);
+    const hasSubs = (tasksByRoot.get(session.id)?.length ?? 0) > 0;
+    if (!hasTodos && !hasSubs) return keepTodoSession(session, ui.filter, now) && session.pane;
+    return keepTodoSession(session, ui.filter, now) || hasSubs;
+  }).sort(sortTodoSessions);
+  let scoped = filtered;
+  let current;
+  if (ui.scope === 'session') {
+    current = all.find(session => session.id === ui.sessionId) ?? filtered.find(session => session.id === ui.sessionId);
+    scoped = current ? [current] : [];
+  }
+  const statusFilter = ui.status ?? 'all';
+  const totals = { in_progress: 0, pending: 0, completed: 0, abandoned: 0 };
+  for (const session of scoped) {
+    const part = countTodoItems(session.phases);
+    totals.in_progress += part.in_progress;
+    totals.pending += part.pending;
+    totals.completed += part.completed;
+    totals.abandoned += part.abandoned;
+    for (const task of tasksByRoot.get(session.id) ?? []) {
+      const sub = countTodoItems(task.todos?.phases);
+      totals.in_progress += sub.in_progress;
+      totals.pending += sub.pending;
+      totals.completed += sub.completed;
+      totals.abandoned += sub.abandoned;
+    }
+  }
+  const rows = [];
+  const foldKeys = new Set();
+  for (const session of scoped) {
+    const phases = session.phases ?? [];
+    const sessionTasks = tasksByRoot.get(session.id) ?? [];
+    const { roots, children } = linkSessionTasks(sessionTasks);
+    const hasOwn = phases.some(phase => phase.tasks.length);
+    const hasSubs = roots.length > 0;
+    if (ui.scope === 'global' && !hasOwn && !hasSubs && !session.pane) continue;
+    if (rows.length) rows.push({ segments: [] });
+    const active = session.id === ui.activeSessionId;
+    const own = todoDoneTotal(phases);
+    const subRunning = sessionTasks.filter(task => task.status === 'running').length;
+    const headerAt = rows.length;
+    rows.push({
+      key: `todosession:${session.id}`,
+      target: { sessionId: session.id },
+      header: true,
+      background: active ? ACTIVE_BG : undefined,
+      segments: todoSessionHeader(session, now, tick, columns, active, { ownDone: own.done, ownTotal: own.total, subagents: sessionTasks.length || undefined, subRunning: subRunning || undefined }),
+      detail: `session ${session.id}${session.pane ? ` · pane ${session.pane.paneId}` : ''}`,
+    });
+    if (!hasOwn && !hasSubs) {
+      if (ui.scope === 'session') rows.push({ segments: [seg('    no todo list in this session', '90')] });
+      continue;
+    }
+    const ctx = { session, rows, ui, now, tick, columns, folded, foldKeys, statusFilter, children, parentKey: `todosession:${session.id}` };
+    const top = [];
+    if (hasOwn) top.push('phases');
+    if (hasSubs) top.push('subs');
+    top.forEach((kind, index) => {
+      const isLast = index === top.length - 1;
+      if (kind === 'phases') {
+        appendPhaseRows({ ...ctx, pendingAfterPhases: !isLast && hasSubs, phaseScope: session.id, boldPhase: activePhaseIndex(phases) }, phases, session.id, 0, [], false);
+      } else {
+        const finishedLimit = ui.scope === 'global' ? 5 : Infinity;
+        let finished = 0;
+        let hidden = 0;
+        const visibleRoots = [];
+        for (const task of roots) {
+          if (task.terminal && ui.scope === 'global' && ++finished > finishedLimit) {
+            hidden += 1;
+            continue;
+          }
+          visibleRoots.push(task);
+        }
+        const hasMoreRow = hidden > 0;
+        visibleRoots.forEach((task, tIndex) => {
+          const nextIsLast = isLast && tIndex === visibleRoots.length - 1 && !hasMoreRow;
+          appendSubagentRows({ ...ctx, nextIsLast }, task, 0, [], false);
+        });
+        if (hasMoreRow) {
+          rows.push({
+            segments: [seg('└ ', '90'), seg(`+${hidden} more finished · s shows this whole session`, '90')],
+          });
+        }
+      }
+    });
+    const body = rows.slice(headerAt + 1);
+    const hasVisibleItems = body.some(row => row.key?.startsWith('todo:'));
+    if (!hasVisibleItems && hasOwn && ui.scope === 'session' && statusFilter !== 'all') {
+      rows.push({ segments: [seg('    no items match', '90')] });
+    }
+  }
+  const listForCycle = filtered.slice();
+  for (const session of sessionList) {
+    if (!listForCycle.some(entry => entry.id === session.id)) listForCycle.push(session);
+  }
+  listForCycle.sort(sortTodoSessions);
+  return { rows, sessions: listForCycle, current, totals, foldKeys: [...foldKeys] };
+}
+
 function bar(run, size) {
   const total = run.nodes.length || 1;
   const done = run.nodes.filter(node => node.state === 'completed' || node.state === 'skipped').length;
@@ -259,6 +673,7 @@ function dagRows(run, session, tasksById, columns, now, tick, showSession, activ
 }
 
 export function buildView(data, panes, ui, now, columns, tick = 0) {
+  if (ui.view === 'tasks') return todoView(data, panes, ui, now, columns, tick);
   const all = buildSessions(data, panes, ui.filter, now);
   const sessionList = all.filter(session => session.allTasks || session.runs.length || session.pane);
   let scoped = all;
@@ -310,10 +725,24 @@ export function buildView(data, panes, ui, now, columns, tick = 0) {
 export function header(view, ui, now, columns) {
   const scope = ui.scope === 'global'
     ? [seg(' GLOBAL ', '1;7;36', 'scope')]
-    : [seg(' SESSION ', '1;7;35', 'scope'), seg(` ${view.current ? fit(sessionLabel(view.current), Math.min(width(sessionLabel(view.current)), Math.max(12, columns - 64))) : 'none selected'}`, '35', 'scope')];
+    : [seg(' SESSION ', '1;7;35', 'scope'), seg(` ${view.current ? fit(ui.view === 'tasks' ? todoSessionLabel(view.current) : sessionLabel(view.current), Math.min(width(ui.view === 'tasks' ? todoSessionLabel(view.current) : sessionLabel(view.current)), Math.max(12, columns - 64))) : 'none selected'}`, '35', 'scope')];
   const tab = (name, id) => seg(` ${name} `, ui.view === id ? '1;7' : '90', `view:${id}`);
+  if (ui.view === 'tasks') {
+    const t = view.totals;
+    const left = [seg(' OmO Tasks ', '1'), seg(' '), ...scope, seg('  '), tab('Agents', 'agents'), tab('DAG', 'dag'), tab('Tasks', 'tasks'), seg('  '),
+      seg(`filter:${ui.filter}`, '90', 'filter'), seg('  '), seg(`status:${ui.status ?? 'all'}`, '90', 'status')];
+    const right = [seg(`◐ ${t.in_progress} in progress`, t.in_progress ? '1;33' : '90'), seg('  '), seg(`○ ${t.pending} todo`, '90'), seg('  '),
+      seg(`✔ ${t.completed} done`, '32'), seg('  '), seg(`⊘ ${t.abandoned}`, '90'), seg(`  ${new Date(now).toTimeString().slice(0, 8)} `, '90')];
+    const compact = [seg(`◐${t.in_progress}`, t.in_progress ? '1;33' : '90'), seg(` ○${t.pending}`, '90'), seg(` ✔${t.completed}`, '32'), seg(` ⊘${t.abandoned} `, '90')];
+    const leftW = left.reduce((sum, part) => sum + width(part.text), 0);
+    const fits = parts => leftW + parts.reduce((sum, part) => sum + width(part.text), 0) + 1 <= columns;
+    const chosen = fits(right) ? right : fits(compact) ? compact : null;
+    const rightW = chosen ? chosen.reduce((sum, part) => sum + width(part.text), 0) : 0;
+    const line = chosen ? [...left, seg(' '.repeat(Math.max(0, columns - leftW - rightW))), ...chosen] : left;
+    return [line, [seg('─'.repeat(columns), '90')]];
+  }
   const t = view.totals;
-  const left = [seg(' OmO Agents ', '1'), seg(' '), ...scope, seg('  '), tab('Agents', 'agents'), tab('DAG', 'dag'), seg('  '), seg(`filter:${ui.filter}`, '90', 'filter')];
+  const left = [seg(' OmO Agents ', '1'), seg(' '), ...scope, seg('  '), tab('Agents', 'agents'), tab('DAG', 'dag'), tab('Tasks', 'tasks'), seg('  '), seg(`filter:${ui.filter}`, '90', 'filter')];
   const right = [seg(`${SPINNER[0]} ${t.running} running`, t.running ? '33' : '90'), seg('  '), seg(`○ ${t.waiting}`, '90'), seg('  '),
     seg(`✔ ${t.completed}`, '32'), seg('  '), seg(`✖ ${t.failed}`, t.failed ? '31' : '90'), seg(`  ${new Date(now).toTimeString().slice(0, 8)} `, '90')];
   const compact = [seg(`${SPINNER[0]}${t.running}`, t.running ? '33' : '90'), seg(` ✔${t.completed}`, '32'), seg(` ✖${t.failed} `, t.failed ? '31' : '90')];
@@ -321,19 +750,30 @@ export function header(view, ui, now, columns) {
   const fits = parts => leftW + parts.reduce((sum, part) => sum + width(part.text), 0) + 1 <= columns;
   const chosen = fits(right) ? right : fits(compact) ? compact : null;
   const rightW = chosen ? chosen.reduce((sum, part) => sum + width(part.text), 0) : 0;
-  const line = chosen ? [...left, seg(' '.repeat(columns - leftW - rightW)), ...chosen] : left;
+  const line = chosen ? [...left, seg(' '.repeat(Math.max(0, columns - leftW - rightW))), ...chosen] : left;
   return [line, [seg('─'.repeat(columns), '90')]];
 }
 
-export const HINTS = 'click select · click again/⏎ jump  g global/session  s session  v agents/dag  a filter  [ ] cycle  j/k  q quit';
-const SHORT_HINTS = 'click  g scope  s session  v view  a filter  [ ]  j/k  q quit';
+export const HINTS = 'click select · click again/⏎ jump  g global/session  s session  v view  a filter  f status  [ ] cycle  j/k  q quit';
+const SHORT_HINTS = 'click  g scope  s session  v view  a filter  f status  [ ]  j/k  q quit';
+const TASKS_HINTS = 'click select · ▸ toggle fold  g scope  s session  v view  a filter  f status  Space fold  z/Z all  [ ]  j/k  q quit';
+const TASKS_SHORT_HINTS = 'click  ▸ fold  g scope  v view  a/f filter  Space  z/Z  [ ]  j/k  q quit';
 
-export function footer(selected, columns, message) {
-  return [[seg('─'.repeat(columns), '90')], [seg(message ?? selected?.detail ?? '', message ? '33' : '')], [seg(width(HINTS) <= columns ? HINTS : SHORT_HINTS, '90')]];
+export function footer(selected, columns, message, ui) {
+  const hints = ui?.view === 'tasks'
+    ? (width(TASKS_HINTS) <= columns ? TASKS_HINTS : TASKS_SHORT_HINTS)
+    : (width(HINTS) <= columns ? HINTS : SHORT_HINTS);
+  return [[seg('─'.repeat(columns), '90')], [seg(message ?? selected?.detail ?? '', message ? '33' : '')], [seg(hints, '90')]];
 }
 
 export function emptyRows(ui) {
   if (ui.scope === 'session' && !ui.sessionId) return [[seg('  No OmO session found for this pane. Press [ or ] to pick one, or g for global.', '90')]];
+  if (ui.view === 'tasks') {
+    const widen = ui.filter === 'all' ? '' : 'Press a to widen the filter';
+    const global = ui.scope === 'session' ? 'g for global' : '';
+    const hint = [widen, global].filter(Boolean).join(', ');
+    return [[seg(`  No todo lists in this scope with filter "${ui.filter}" / status "${ui.status ?? 'all'}".${hint ? ` ${hint[0].toUpperCase()}${hint.slice(1)}.` : ''}`, '90')]];
+  }
   const what = ui.view === 'dag' ? 'DAG runs' : 'subagents';
   const widen = ui.filter === 'all' ? '' : 'Press a to widen the filter';
   const global = ui.scope === 'session' ? 'g for global' : '';

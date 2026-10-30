@@ -4,6 +4,9 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
 export const TERMINAL = new Set(['completed', 'error', 'failed', 'cancelled', 'interrupted', 'lost', 'skipped']);
+export const TODO_STATUSES = ['pending', 'in_progress', 'completed', 'abandoned'];
+
+const SESSION_FILE = /_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
 
 export function defaultAgentDir(env = process.env) {
   return env.OMO_AGENTS_DIR || env.OMO_CODING_AGENT_DIR || join(homedir(), '.omo', 'agent');
@@ -105,6 +108,19 @@ export function normalizeRun(raw, store) {
   };
 }
 
+export function normalizeTodos(details) {
+  if (!details?.phases || !Array.isArray(details.phases)) return null;
+  return details.phases.map(phase => ({
+    name: text(phase.name) ?? '',
+    tasks: (Array.isArray(phase.tasks) ? phase.tasks : []).map(task => {
+      const content = text(task?.content);
+      if (!content) return null;
+      const status = TODO_STATUSES.includes(task.status) ? task.status : 'pending';
+      return { content, status };
+    }).filter(Boolean),
+  }));
+}
+
 export function stages(run) {
   const byId = new Map(run.nodes.map(node => [node.id, node]));
   const placed = new Set();
@@ -124,6 +140,7 @@ export class Store {
   constructor(agentDir = defaultAgentDir()) {
     this.agentDir = agentDir;
     this.cache = new Map();
+    this.todoCache = new Map();
   }
 
   readJson(path) {
@@ -187,6 +204,91 @@ export class Store {
     return value;
   }
 
+  loadTodos({ since = 0, include = new Set() } = {}) {
+    const states = [];
+    const sessionsDir = join(this.agentDir, 'sessions');
+    for (const dir of list(sessionsDir)) {
+      if (dir.endsWith('-artifacts')) continue;
+      const sub = join(sessionsDir, dir);
+      for (const file of list(sub)) {
+        const match = file.match(SESSION_FILE);
+        if (!match) continue;
+        const path = join(sub, file);
+        let info;
+        try { info = statSync(path); }
+        catch { this.todoCache.delete(path); continue; }
+        const sessionId = match[1];
+        if (info.mtimeMs < since && !include.has(sessionId)) continue;
+        const state = this.todosAt(path, sessionId);
+        if (state?.phases) states.push(state);
+      }
+    }
+    const byId = new Map();
+    for (const state of states) {
+      const tasks = state.phases.reduce((n, phase) => n + phase.tasks.length, 0);
+      if (tasks < 1) continue;
+      const previous = byId.get(state.id);
+      if (!previous || previous.updatedAt < state.updatedAt) byId.set(state.id, state);
+    }
+    return [...byId.values()];
+  }
+
+  todosAt(path, fileSessionId) {
+    let info;
+    try { info = statSync(path); }
+    catch { this.todoCache.delete(path); return null; }
+    if (!path.endsWith('.jsonl')) {
+      const newest = list(path).filter(name => name.endsWith('.jsonl')).sort().pop();
+      if (!newest) return null;
+      path = join(path, newest);
+      try { info = statSync(path); }
+      catch { return null; }
+    }
+    const size = info.size;
+    let cached = this.todoCache.get(path);
+    if (!cached || size < cached.offset) {
+      cached = { offset: 0, state: { id: fileSessionId, cwd: undefined, project: undefined, name: undefined, phases: null, updatedAt: 0 } };
+    }
+    const chunk = readBytes(path, cached.offset, size);
+    if (!chunk.buffer.length) {
+      this.todoCache.set(path, cached);
+      return cached.state.phases ? { ...cached.state } : null;
+    }
+    const lastNewline = chunk.buffer.lastIndexOf(10);
+    if (lastNewline < 0) {
+      this.todoCache.set(path, cached);
+      return cached.state.phases ? { ...cached.state } : null;
+    }
+    const complete = chunk.buffer.subarray(0, lastNewline + 1).toString('utf8');
+    const lines = complete.split('\n').filter(Boolean);
+    for (const line of lines) {
+      if (!line.includes('"type":"session"') && !line.includes('"type":"session_info"') && !line.includes('"toolName":"todo"')) continue;
+      let entry;
+      try { entry = JSON.parse(line); }
+      catch { continue; }
+      if (entry.type === 'session') {
+        if (text(entry.id)) cached.state.id = text(entry.id);
+        const cwd = text(entry.cwd);
+        if (cwd) {
+          cached.state.cwd = cwd;
+          cached.state.project = basename(cwd);
+        }
+      } else if (entry.type === 'session_info') {
+        const name = text(entry.name);
+        if (name) cached.state.name = name;
+      } else if (entry.type === 'message' && entry.message?.role === 'toolResult' && entry.message?.toolName === 'todo') {
+        const phases = normalizeTodos(entry.message.details);
+        if (phases) {
+          cached.state.phases = phases;
+          cached.state.updatedAt = time(entry.timestamp) ?? cached.state.updatedAt;
+        }
+      }
+    }
+    cached.offset += lastNewline + 1;
+    this.todoCache.set(path, cached);
+    return cached.state.phases ? { ...cached.state } : null;
+  }
+
   shardOwners() {
     const owners = new Map();
     const dir = join(this.agentDir, 'rpc', 'shards');
@@ -205,6 +307,16 @@ export class Store {
 function list(dir) {
   try { return readdirSync(dir); }
   catch { return []; }
+}
+
+function readBytes(file, offset, size) {
+  const length = Math.max(0, size - offset);
+  if (!length) return { buffer: Buffer.alloc(0) };
+  const buffer = Buffer.alloc(length);
+  const fd = openSync(file, 'r');
+  try { readSync(fd, buffer, 0, length, offset); }
+  finally { closeSync(fd); }
+  return { buffer };
 }
 
 function tail(file, size, bytes) {

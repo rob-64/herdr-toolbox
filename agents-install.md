@@ -59,8 +59,8 @@ Tabs the user named themselves are left alone; only unnamed tabs (`1`, `2`,
 
 ## 4. Install the OmO extensions (board + status)
 
-The board extension adds `/agents-board [mode]` (opens the agents board) and
-`/rename-tab <name>` (renames the current tab). The status extension reports OmO
+The board extension adds `/agents-board [mode]` (agents board), `/tasks-board [mode]`
+(tasks board), and `/rename-tab <name>` (renames the current tab). The status extension reports OmO
 idle/working/blocked state (including background tasks) to herdr. OmO loads
 extensions from `~/.omo/agent/extensions/`.
 
@@ -108,6 +108,12 @@ key = "prefix+o"
 type = "plugin_action"
 command = "herdr-omo-toolbox.open"
 description = "OmO agents board"
+
+[[keys.command]]
+key = "prefix+t"
+type = "plugin_action"
+command = "herdr-omo-toolbox.open-tasks"
+description = "OmO tasks board"
 ```
 
 If the user agrees, append them, check for conflicts, and reload:

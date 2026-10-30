@@ -2,9 +2,10 @@ import { writeFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { anchorPane, defaultAgentDir, paneSessions, Store } from './data.mjs';
-import { buildView, emptyRows, FILTERS, footer, header, paint, width } from './render.mjs';
+import { buildView, emptyRows, expandAllTaskFolds, FILTERS, foldAllTaskFolds, footer, header, keepTask, paint, setTaskFold, STATUS_FILTERS, toggleTaskFold, width } from './render.mjs';
 
-const VIEWS = ['agents', 'dag'];
+const VIEWS = ['agents', 'dag', 'tasks'];
+const DAY = 24 * 60 * 60 * 1000;
 const SCOPES = ['global', 'session'];
 const SELECTED_BG = '48;5;237';
 
@@ -20,6 +21,7 @@ function parseArgs(argv) {
     else if (arg === '--view') options.view = value();
     else if (arg === '--scope') options.scope = value();
     else if (arg === '--filter') options.filter = value();
+    else if (arg === '--status') options.status = value();
     else if (arg === '--session') options.session = value();
     else if (arg === '--session-pane') options.sessionPane = value();
     else if (arg === '--width') options.width = Number(value());
@@ -28,23 +30,24 @@ function parseArgs(argv) {
     else if (arg === '-h' || arg === '--help') options.help = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
-  for (const [key, allowed] of [['view', VIEWS], ['scope', SCOPES], ['filter', FILTERS]]) {
+  for (const [key, allowed] of [['view', VIEWS], ['scope', SCOPES], ['filter', FILTERS], ['status', STATUS_FILTERS]]) {
     if (options[key] !== undefined && !allowed.includes(options[key])) throw new Error(`--${key} must be one of ${allowed.join(', ')}`);
   }
   return options;
 }
 
-const USAGE = `agents-board: live board of OmO subagents and DAG runs
+const USAGE = `agents-board: live board of OmO subagents, DAG runs, and todo lists
 
-  --view agents|dag         --scope global|session     --filter active|today|all
+  --view agents|dag|tasks   --scope global|session     --filter active|today|all
+  --status all|open|in_progress|pending|completed|abandoned
   --session <id>            --session-pane <herdr pane id>
   --once                    print one frame and exit   --json   print the resolved model
   --width N --height N      frame size for --once      --no-color
   --agent-dir <path>        OmO agent dir (default ~/.omo/agent)
 
-keys: g global/session  s selected session  v/Tab agents/dag  a filter  [ ] session  j/k move  Enter jump  r refresh  q quit
+keys: g global/session  s selected session  v/Tab view  a filter  f status  [ ] session  j/k move  Space fold (tasks)  z/Z fold all  Enter jump  r refresh  q quit
 mouse: click a row to select it, click it again to jump to its pane; click a session header to open/close
-       that session; click GLOBAL/SESSION, Agents/DAG, or filter in the header; wheel scrolls`;
+       that session; click GLOBAL/SESSION, Agents/DAG/Tasks, filter, or status in the header; wheel scrolls`;
 
 function herdr(args) {
   return new Promise(resolve => {
@@ -56,26 +59,40 @@ class Board {
   constructor(options) {
     this.options = options;
     this.store = new Store(options.agentDir ?? defaultAgentDir());
+    const envView = process.env.OMO_BOARD_VIEW;
+    const initialView = options.view ?? (VIEWS.includes(envView) ? envView : undefined) ?? 'agents';
     this.ui = {
-      view: options.view ?? 'agents',
+      view: initialView,
       scope: options.scope ?? 'global',
       filter: options.filter ?? 'active',
+      status: options.status ?? 'all',
       sessionId: options.session,
       activeSessionId: undefined,
       selectedKey: undefined,
       selectedIndex: 0,
       scroll: 0,
       message: undefined,
+      folded: new Map(),
     };
     this.anchor = options.sessionPane ?? anchorPane();
-    this.data = { tasks: [], runs: [] };
+    this.data = { tasks: [], runs: [], todos: [] };
     this.panes = { bySession: new Map(), byPane: new Map(), panes: new Map() };
     this.tick = 0;
     this.last = '';
   }
 
   refreshData() {
-    this.data = this.store.load();
+    const loaded = this.store.load();
+    let todos = this.data.todos ?? [];
+    if (this.ui.view === 'tasks') {
+      const since = this.ui.filter === 'all' ? 0 : Date.now() - 2 * DAY;
+      todos = this.store.loadTodos({ since, include: new Set(this.panes.bySession.keys()) });
+      const now = Date.now();
+      for (const task of loaded.tasks) {
+        if (keepTask(task, this.ui.filter, now)) task.todos = this.store.todosAt(task.transcript, task.id);
+      }
+    }
+    this.data = { ...loaded, todos };
   }
 
   async refreshPanes() {
@@ -102,8 +119,10 @@ class Board {
       return;
     }
     const cwd = this.panes.panes.get(this.anchor)?.cwd;
-    const match = cwd && this.data.tasks.filter(task => task.cwd === cwd).sort((a, b) => b.updatedAt - a.updatedAt)[0];
-    if (match) this.ui.sessionId = match.rootSessionId;
+    const matchTask = cwd && this.data.tasks.filter(task => task.cwd === cwd).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (matchTask) { this.ui.sessionId = matchTask.rootSessionId; return; }
+    const matchTodo = cwd && (this.data.todos ?? []).filter(todo => todo.cwd === cwd).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0];
+    if (matchTodo) this.ui.sessionId = matchTodo.id;
   }
 
   view(columns) {
@@ -117,7 +136,30 @@ class Board {
     this.ui.selectedKey = selectedRow?.key;
     this.selected = selectedRow;
     this.selectable = selectable;
+    this.foldKeys = view.foldKeys ?? [];
     return { ...view, selectedRow, selectedRowIndex: selectable[this.ui.selectedIndex] };
+  }
+
+  toggleSelectedFold() {
+    const row = this.selected;
+    if (!row?.foldKey) return;
+    this.ui.folded = toggleTaskFold(this.ui.folded, row.foldKey, row.foldDefault);
+  }
+
+  expandSelectedFold() {
+    const row = this.selected;
+    if (!row?.foldKey) return;
+    this.ui.folded = setTaskFold(this.ui.folded, row.foldKey, false);
+  }
+
+  collapseSelectedFold() {
+    const row = this.selected;
+    if (row?.foldKey) this.ui.folded = setTaskFold(this.ui.folded, row.foldKey, true);
+    else if (row?.parentKey) this.ui.selectedKey = row.parentKey;
+  }
+
+  foldAllInScope(fold) {
+    this.ui.folded = fold ? foldAllTaskFolds(this.ui.folded, this.foldKeys ?? []) : expandAllTaskFolds(this.ui.folded, this.foldKeys ?? []);
   }
 
   frame(columns, rows) {
@@ -125,7 +167,7 @@ class Board {
     const view = this.view(columns);
     const color = this.options.color ?? true;
     const top = header(view, this.ui, now, columns);
-    const bottom = footer(view.selectedRow, columns, this.ui.message);
+    const bottom = footer(view.selectedRow, columns, this.ui.message, this.ui);
     const bodyHeight = Math.max(1, rows - top.length - bottom.length);
     const body = view.rows.length ? view.rows : emptyRows(this.ui).map(segments => ({ segments }));
     const target = view.selectedRowIndex ?? 0;
@@ -196,13 +238,24 @@ class Board {
   }
 
   toggleView(view) {
-    this.ui.view = view ?? (this.ui.view === 'agents' ? 'dag' : 'agents');
+    if (view && VIEWS.includes(view)) this.ui.view = view;
+    else this.ui.view = VIEWS[(VIEWS.indexOf(this.ui.view) + 1) % VIEWS.length];
     this.ui.selectedKey = undefined;
     this.ui.selectedIndex = 0;
+    if (this.ui.view === 'tasks') this.refreshData();
   }
 
   cycleFilter() {
     this.ui.filter = FILTERS[(FILTERS.indexOf(this.ui.filter) + 1) % FILTERS.length];
+    if (this.ui.view === 'tasks') this.refreshData();
+  }
+
+  cycleStatus() {
+    this.ui.status = STATUS_FILTERS[(STATUS_FILTERS.indexOf(this.ui.status) + 1) % STATUS_FILTERS.length];
+    if (this.ui.view !== 'tasks') this.ui.view = 'tasks';
+    this.refreshData();
+    this.ui.selectedKey = undefined;
+    this.ui.selectedIndex = 0;
   }
 
   click(x, y) {
@@ -211,11 +264,16 @@ class Board {
       const hit = this.layout.hits.find(entry => x >= entry.from && x < entry.to);
       if (hit?.action === 'scope') this.toggleScope();
       else if (hit?.action === 'filter') this.cycleFilter();
+      else if (hit?.action === 'status') this.cycleStatus();
       else if (hit?.action?.startsWith('view:')) this.toggleView(hit.action.slice(5));
       return undefined;
     }
     const row = this.layout.visible[y - this.layout.bodyStart];
     if (!row?.key) return undefined;
+    if (row.foldKey && x <= (row.foldToggleTo ?? 0)) {
+      this.ui.folded = toggleTaskFold(this.ui.folded, row.foldKey, row.foldDefault);
+      return undefined;
+    }
     if (row.header) {
       const open = this.ui.scope === 'session' && this.ui.sessionId === row.target.sessionId;
       if (open) { this.ui.scope = 'global'; this.ui.selectedKey = row.key; }
@@ -293,13 +351,22 @@ async function interactive(board) {
       if (key === 'q' || key === '\x03' || key === '\x1b') return quit(0);
       if (key === 'j' || key === '\x1b[B' || key === '\x1bOB') board.move(1);
       else if (key === 'k' || key === '\x1b[A' || key === '\x1bOA') board.move(-1);
-      else if (key === '\x1b[6~' || key === ' ') board.move(10);
+      else if (key === '\x1b[6~') board.move(10);
+      else if (key === ' ') {
+        if (board.ui.view === 'tasks') board.toggleSelectedFold();
+        else board.move(10);
+      }
+      else if (key === 'z') board.foldAllInScope(true);
+      else if (key === 'Z') board.foldAllInScope(false);
+      else if (board.ui.view === 'tasks' && (key === 'h' || key === '\x1b[D' || key === '\x1bOD')) board.collapseSelectedFold();
+      else if (board.ui.view === 'tasks' && (key === 'l' || key === '\x1b[C' || key === '\x1bOC')) board.expandSelectedFold();
       else if (key === '\x1b[5~') board.move(-10);
       else if (key === 'G') board.move(1e6);
       else if (key === 'g') board.toggleScope();
       else if (key === 's') board.showSelectedSession();
       else if (key === 'v' || key === '\t') board.toggleView();
       else if (key === 'a') board.cycleFilter();
+      else if (key === 'f') board.cycleStatus();
       else if (key === ']') board.cycleSession(1);
       else if (key === '[') board.cycleSession(-1);
       else if (key === 'r') { board.refreshData(); await board.refreshPanes(); }
@@ -333,9 +400,11 @@ async function main() {
         activeSessionId: board.ui.activeSessionId ?? null,
         view: board.ui.view,
         filter: board.ui.filter,
+        status: board.ui.status,
         tasks: board.data.tasks.length,
         runs: board.data.runs.length,
-        sessions: board.sessions.map(session => ({ id: session.id, pane: session.pane?.paneId ?? null, title: session.pane?.title ?? null, project: session.project, tasks: session.tasks.length, runs: session.runs.length })),
+        todos: board.data.todos?.length ?? 0,
+        sessions: board.sessions.map(session => ({ id: session.id, pane: session.pane?.paneId ?? null, title: session.pane?.title ?? null, project: session.project, tasks: session.tasks?.length ?? 0, runs: session.runs?.length ?? 0 })),
       }, null, 2));
     } else console.log(lines.map(line => line.replace(/\s+$/, '')).join('\n'));
     return;
