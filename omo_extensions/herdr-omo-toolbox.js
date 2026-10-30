@@ -25,17 +25,13 @@ export function resolveMode(arg) {
 }
 
 export function getModeArgumentCompletions(prefix) {
+	// No popup until a mode is typed: Enter on an open popup runs the highlighted item, so a bare
+	// `/agents-board ` must not offer one (it should open the default split).
 	const p = prefix.trim().toLowerCase();
-	const items = [
-		...MODES,
-		{ name: "help", short: "h", help: "show modes" },
-	]
+	if (!p) return null;
+	const items = MODES
 		.filter((mode) => mode.name.toLowerCase().startsWith(p) || mode.short.toLowerCase().startsWith(p))
-		.map((mode) => ({
-			value: mode.name,
-			label: mode.short ? modeLabel(mode) : mode.name,
-			description: mode.help,
-		}));
+		.map((mode) => ({ value: mode.name, label: modeLabel(mode), description: mode.help }));
 	return items.length ? items : null;
 }
 

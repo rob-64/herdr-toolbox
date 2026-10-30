@@ -52,6 +52,16 @@ describe("getModeArgumentCompletions", () => {
 		);
 		assert.ok(items.every((item) => item.label.includes("(")));
 	});
+
+	it("offers nothing for an empty argument, so Enter runs the default split", () => {
+		assert.equal(getModeArgumentCompletions(""), null);
+		assert.equal(getModeArgumentCompletions("  "), null);
+		assert.equal(resolveMode("").name, "split");
+	});
+
+	it("never offers help as a completion", () => {
+		assert.equal(getModeArgumentCompletions("h"), null);
+	});
 });
 
 describe("boardHelp", () => {
