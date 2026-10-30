@@ -30,8 +30,9 @@ export function resolveMode(arg) {
 export function getModeArgumentCompletions(prefix) {
 	// No popup until a mode is typed: Enter on an open popup runs the highlighted item, so a bare
 	// `/agents-board ` must not offer one (it should open the default split).
+	// Same for an exact short or full name, so `/agents-board p` runs on the first Enter.
 	const p = prefix.trim().toLowerCase();
-	if (!p) return null;
+	if (!p || MODES.some((mode) => mode.short === p || mode.name === p)) return null;
 	const items = MODES
 		.filter((mode) => mode.name.toLowerCase().startsWith(p) || mode.short.toLowerCase().startsWith(p))
 		.map((mode) => ({ value: mode.name, label: modeLabel(mode), description: mode.help }));

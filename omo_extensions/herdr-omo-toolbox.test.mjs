@@ -45,7 +45,7 @@ describe("resolveMode", () => {
 
 describe("getModeArgumentCompletions", () => {
 	it("matches name or short prefix and keeps full name as value", () => {
-		const items = getModeArgumentCompletions("s");
+		const items = getModeArgumentCompletions("sp");
 		assert.deepEqual(
 			items.map((item) => item.value),
 			["split", "split-down"],
@@ -57,6 +57,11 @@ describe("getModeArgumentCompletions", () => {
 		assert.equal(getModeArgumentCompletions(""), null);
 		assert.equal(getModeArgumentCompletions("  "), null);
 		assert.equal(resolveMode("").name, "split");
+	});
+
+	it("offers nothing for an exact short or full name, so one Enter runs it", () => {
+		for (const arg of ["p", "sd", "s", "popup", "split-down"]) assert.equal(getModeArgumentCompletions(arg), null, arg);
+		assert.deepEqual(getModeArgumentCompletions("spl").map((item) => item.value), ["split", "split-down"]);
 	});
 
 	it("never offers help as a completion", () => {
