@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { paint, width } from '../board/render.mjs';
-import { buildRows, emptyRows, footer, header, keepPr } from './render.mjs';
+import { buildRows, emptyRows, footer, header, keepPr, notifications } from './render.mjs';
 
 const now = Date.parse('2026-10-30T12:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
@@ -82,6 +82,16 @@ test('role badges keep a fixed column', () => {
   assert.match(text(5), /OC✎R/);
   assert.match(text(1), /O··· {2}you/);
   assert.equal(column(1, 'O···'), column(5, 'OC✎R'));
+});
+
+test('notifications batch each kind and cap the body at three PRs', () => {
+  const events = [1, 3, 5, 4].map(number => ({ kind: 'new', pr: data.prs.find(item => item.number === number) }));
+  events.push({ kind: 'approved', pr: data.prs[0] });
+  assert.deepEqual(notifications(events), [
+    { title: '4 new PRs', body: 'acme/web#1 PR 1 (me)\nacme/web#3 PR 3 (alice)\nacme/cjk#5 修复登录页面的布局问题并且更新文档说明以及测试用例 🚀🚀🚀 (alice)\n+1 more' },
+    { title: 'PR approved', body: 'acme/web#1 PR 1' },
+  ]);
+  assert.deepEqual(notifications([]), []);
 });
 
 test('header shows clickable filter, role and refresh interval', () => {

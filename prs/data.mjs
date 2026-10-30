@@ -153,6 +153,25 @@ export function mergePrs(sources, login) {
 }
 
 /**
+ * What changed since the PRs recorded in `seen` (url -> review decision), which it updates:
+ * open PRs someone else opened that are new to the board, and PRs you opened or committed to that became approved.
+ */
+export function prChanges(seen, prs, login) {
+  const events = [];
+  for (const pr of prs) {
+    const known = seen.has(pr.url);
+    const wasApproved = seen.get(pr.url) === 'APPROVED';
+    seen.set(pr.url, pr.review);
+    if (!known) {
+      if ((pr.state === 'open' || pr.state === 'draft') && pr.author !== login) events.push({ kind: 'new', pr });
+    } else if (pr.review === 'APPROVED' && !wasApproved && (pr.roles.has('opened') || pr.roles.has('committed'))) {
+      events.push({ kind: 'approved', pr });
+    }
+  }
+  return events;
+}
+
+/**
  * Fetch every PR the gh user opened, committed to, commented on, or reviewed.
  * A failing source is reported in `errors`; the other sources still load.
  */

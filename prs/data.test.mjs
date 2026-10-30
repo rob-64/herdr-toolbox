@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { filterQualifier, mergePrs, normalizePr, PrStore, pushedBranches } from './data.mjs';
+import { filterQualifier, mergePrs, normalizePr, prChanges, PrStore, pushedBranches } from './data.mjs';
 
 const now = Date.parse('2026-10-30T12:00:00.000Z');
 const LOGIN = 'me';
@@ -48,6 +48,21 @@ function fakeGh(overrides = {}) {
   };
   return { run, calls };
 }
+
+test('prChanges reports open PRs others opened that are new, and approvals on PRs you opened or committed to', () => {
+  const seen = new Map();
+  const load = (...raws) => mergePrs(raws.map(([role, raw]) => ({ role, nodes: [raw] })), LOGIN);
+  const changes = prs => prChanges(seen, prs, LOGIN).map(event => `${event.kind} #${event.pr.number}`);
+  assert.deepEqual(changes(load(['commented', pr(1)], ['opened', pr(2, { author: { login: LOGIN } })])), ['new #1']);
+  assert.deepEqual(changes(load(['commented', pr(1)], ['opened', pr(2, { author: { login: LOGIN } })])), [], 'nothing changed');
+  assert.deepEqual(changes(load(
+    ['opened', pr(2, { author: { login: LOGIN }, reviewDecision: 'APPROVED' })],
+    ['reviewed', pr(1, { reviewDecision: 'APPROVED' })],
+    ['committed', pr(3, { state: 'MERGED' })],
+    ['opened', pr(4, { author: { login: LOGIN } })],
+  )), ['approved #2'], 'reviewer-only approval, merged and your own new PRs are not news');
+  assert.deepEqual(changes(load(['opened', pr(2, { author: { login: LOGIN }, reviewDecision: 'APPROVED' })])), [], 'approval reported once');
+});
 
 test('normalizePr maps state, draft, checks and strips control characters', () => {
   assert.equal(normalizePr(pr(1, { isDraft: true })).state, 'draft');

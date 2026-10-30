@@ -131,6 +131,19 @@ export function footer(selected, data, columns, message) {
   return [[seg('─'.repeat(columns), '90')], [seg(' '), detail], [seg(` ${HINTS}`, '90')]];
 }
 
+/** One notification per kind of change; several PRs in one refresh are batched. */
+export function notifications(events) {
+  const out = [];
+  for (const [kind, one, many] of [['new', 'New PR', 'new PRs'], ['approved', 'PR approved', 'PRs approved']]) {
+    const prs = events.filter(event => event.kind === kind).map(event => event.pr);
+    if (!prs.length) continue;
+    const line = pr => `${pr.repo}#${pr.number} ${pr.title}${kind === 'new' && pr.author ? ` (${pr.author})` : ''}`;
+    const more = prs.length > 3 ? [`+${prs.length - 3} more`] : [];
+    out.push({ title: prs.length === 1 ? one : `${prs.length} ${many}`, body: [...prs.slice(0, 3).map(line), ...more].join('\n') });
+  }
+  return out;
+}
+
 export function emptyRows(data, ui) {
   if (data.loading && !data.fetchedAt) return [[seg('  Loading pull requests from GitHub…', '90')]];
   if (data.errors?.length && !data.prs?.length) return [[seg(`  ${data.errors[0]}`, '31')]];

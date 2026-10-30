@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { paint, width } from '../board/render.mjs';
-import { PrStore, ghRunner } from './data.mjs';
-import { buildRows, emptyRows, FILTERS, footer, header, REFRESH_INTERVALS, ROLE_FILTERS } from './render.mjs';
+import { PrStore, ghRunner, prChanges } from './data.mjs';
+import { buildRows, emptyRows, FILTERS, footer, header, notifications, REFRESH_INTERVALS, ROLE_FILTERS } from './render.mjs';
 
 const SELECTED_BG = '48;5;237';
 
@@ -56,6 +56,9 @@ class Board {
     };
     this.data = { prs: [], errors: [], loading: false };
     this.loadedFilter = undefined;
+    // url -> review decision from earlier loads, to spot new and newly approved PRs.
+    this.seen = new Map();
+    this.notifyReady = false;
     this.pending = undefined;
     this.last = '';
   }
@@ -66,13 +69,31 @@ class Board {
     const filter = this.ui.filter;
     this.data = { ...this.data, loading: true };
     this.pending = this.store.load(filter).then(result => {
+      // The first load, a filter change, or a load after a failed source only records what is there:
+      // PRs that merely (re)appear in the list are not news.
+      const ready = this.notifyReady && this.loadedFilter === filter;
+      const events = prChanges(this.seen, result.prs, result.login);
+      this.notifyReady = !result.errors.length;
       this.data = { ...result, loading: false };
       this.loadedFilter = filter;
+      if (ready && events.length) return this.notify(events);
     }).finally(() => {
       this.pending = undefined;
       if (this.again || this.loadedFilter !== this.ui.filter) { this.again = false; this.onChange?.(); return this.refresh(); }
     });
     return this.pending;
+  }
+
+  // herdr notification with a sound; the latest summary also shows in the footer.
+  async notify(events) {
+    const notes = notifications(events);
+    this.ui.message = notes.map(note => `${note.title}: ${note.body.split('\n')[0]}`).join(' · ');
+    for (const note of notes) {
+      const error = await new Promise(resolve => {
+        execFile(process.env.HERDR_BIN_PATH || 'herdr', ['notification', 'show', note.title, '--body', note.body, '--sound', 'request'], { timeout: 5000 }, resolve);
+      });
+      if (error) this.ui.message += ` (herdr notification failed: ${String(error.message).split('\n')[0].slice(0, 80)})`;
+    }
   }
 
   view(columns) {

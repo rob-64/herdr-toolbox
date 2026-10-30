@@ -206,6 +206,15 @@ Where the PRs come from:
 - **Opened, commented, reviewed**: GitHub search (`author:`, `commenter:`, `reviewed-by:`), up to 50 most recently updated PRs each.
 - **Committed**: branches you pushed to (your GitHub push events, the last 90 days) matched to PRs by head branch, plus PRs containing commits you authored that landed on a default branch (commit search; skipped for the `open` filter). Commits on someone else's branch older than 90 days are only found once the PR is merged with a merge or rebase commit.
 
+### Notifications
+
+While the board is open, each refresh raises a herdr notification (with a sound) for:
+
+- **New PR**: an open PR someone else opened shows up on the board.
+- **PR approved**: a PR you opened or committed to becomes approved.
+
+The first load, a filter change, and a load after a failed `gh` call only record what's there, so PRs that just reappear don't notify. Several changes in one refresh are batched into one notification per kind. Nothing is watched while the board is closed.
+
 ### Open it
 
 | Action | What it does |
