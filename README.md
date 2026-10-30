@@ -33,11 +33,11 @@ Shows every OmO subagent and DAG run in one live board: status, agent, task, mod
 ```
  OmO Agents  GLOBAL   Agents  DAG   filter:today                 ⠋1 ✔238 ✖1
 ──────────────────────────────────────────────────────────────────────────────
-▍w18:p1 · Update uas-normalize to 7.5.0  󰄬 idle   1 running · 3 done
-  ⠙ plan-reviewer    High-accuracy review of tas-github-ci-parity…    9m04s
-     └ [grep …/workflows/build-and-publish.yml] I'm confirming the nexus-ur…
-  ✔ plan-reviewer    High-accuracy review of tas-github-ci-parity…   10m58s
-  ✔ plan-consultant  Gap-analyze TAS GitHub CI parity plan            7m55s
+▍w18:p1 · Update heron to 7.5.0  󰄬 idle   1 running · 3 done
+  ⠙ plan-reviewer    High-accuracy review of osprey-ci-parity…        9m04s
+     └ [grep …/workflows/build-and-publish.yml] I'm confirming the mirror-u…
+  ✔ plan-reviewer    High-accuracy review of osprey-ci-parity…       10m58s
+  ✔ plan-consultant  Gap-analyze Osprey CI parity plan                7m55s
 ```
 
 ### Open it
@@ -86,11 +86,11 @@ Shows OmO **todo** lists (the `todo` tool) as a **tree** per session: main-sessi
 ```
  OmO Tasks  GLOBAL   Agents  DAG  Tasks   filter:today   status:all
 ──────────────────────────────────────────────────────────────────
-▍w1:p1 · Update BFF CI  ⠙ working  ███████░░░░░ 7/12 done · 2 subagents (1 running)  2m ago
+▍w1:p1 · Update Kite CI  ⠙ working  ███████░░░░░ 7/12 done · 2 subagents (1 running)  2m ago
 ├ ▾ Setup  3/3
 ├ ▾ Wave 1  2/6
 │ ├ ◐ Publish proto jar
-│ └ ○ Resolve c2-services-common
+│ └ ○ Resolve kite-common
 ├ ▾ ⠙ plan-reviewer · High-accuracy review of CI parity plan        4/9   9m04s
 │ └ ▾ Review  4/9
 │   └ ◐ Check workflows
@@ -196,13 +196,13 @@ bin/agents-board --json --view tasks
 Lists every GitHub pull request you opened, committed to, commented on, or reviewed, grouped by repository and refreshed every 2 minutes by default (`t` or clicking `refresh:` cycles 30s / 60s / 120s / 300s; `r` refreshes now). It uses the `gh` CLI, so it needs `gh` on `PATH` and `gh auth login` done.
 
 ```
- @octocat   filter:open   role:any   refresh:120s                          ●9 4s ago
-────────────────────────────────────────────────────────────────────────────────────
-▍acme/helm-charts  2 PRs
-  ● #31    ci: open image bump pull requests from the newest ECR…  ··✎R  alice  ✔ review   40m
-  ● #32    ci: check that images exist in ECR and add a CI gate      O···  you    ✔ review    2h
-▍acme/connector-service  1 PR
-  ● #1     ci: build and release with GitHub Actions                  OC✎R  you    ✖ review   46h
+ @octocat   filter:open   role:any   refresh:120s                                      ●9 4s ago
+────────────────────────────────────────────────────────────────────────────────────────────────
+▍acme/falcon  2 PRs
+  ● #31    ci: open image bump PRs from the newest registry tags  ··✎R  alice   ✔ review     40m
+  ● #32    ci: check that images exist in the registry, gate CI   O···  you     ✔ review      2h
+▍acme/condor  1 PR
+  ● #1     ci: build and release with GitHub Actions              OC✎R  you     ✖ review     46h
 ```
 
 The role column shows how you're involved: `O` opened, `C` committed, `✎` commented, `R` reviewed. State is `●` open, `○` draft, `◆` merged, `✖` closed; then the author, the CI checks (`✔` `✖` `●`), the review decision, and the time since the last update.
