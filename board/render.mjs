@@ -856,7 +856,7 @@ function dagRows(run, session, tasksById, columns, now, tick, showSession, activ
       const routeW = columns >= 100 ? 16 : 0;
       const timeW = 9;
       const { segs: vendorSegs, extra: vendorExtra } = task ? modelIconParts(task.model) : { segs: [], extra: 0 };
-      const errPart = errorMetricPart(task);
+      const errPart = task ? errorMetricPart(task) : undefined;
       const errW = errPart ? width(errPart.text) + 1 : 0;
       const summaryW = Math.max(8, columns - width(rail) - 2 - vendorExtra - idW - 1 - (routeW ? routeW + 1 : 0) - timeW - 2 - errW);
       const nodeElapsed = node.startedAt ? duration((node.endedAt ?? (TERMINAL.has(node.state) ? node.startedAt : now)) - node.startedAt) : '';

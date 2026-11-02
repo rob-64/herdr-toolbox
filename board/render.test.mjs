@@ -371,6 +371,23 @@ test('metrics rows stay within width at 80, 100, and 120 columns', () => {
   }
 });
 
+test('dag view renders nodes with no task yet and shows errors for nodes with one', () => {
+  const task = { id: 'dag-task-1', status: 'running', terminal: false, sessionId, rootSessionId: sessionId, agent: 'explore', summary: 'Scan', startedAt: now - 60_000, updatedAt: now, metrics: { toolErrors: 2 } };
+  const run = {
+    id: 'run-1', name: 'scan-run', status: 'running', sessionId, rootSessionId: sessionId, createdAt: now - 60_000, updatedAt: now,
+    nodes: [
+      { id: 'scan', state: 'running', attempt: 1, taskId: task.id, deps: [], summary: 'Scan repo', startedAt: now - 60_000 },
+      { id: 'write', state: 'pending', attempt: 0, deps: ['scan'], summary: 'Write report' },
+    ],
+  };
+  const ui = { view: 'dag', scope: 'global', filter: 'all', sessionId, activeSessionId: undefined };
+  const view = buildView({ todos: [], tasks: [task], runs: [run] }, panes, ui, now, 120);
+  const text = rowText(view);
+  assert.match(text, /write/);
+  assert.match(text, /✖ ?2/);
+  assert.ok(rowWidths(view).every(w => w <= 120));
+});
+
 test('tasks global scope caps terminal roots and shows more row', () => {
   const capSession = 'cap-session-00000000-0000-0000-0000-000000000001';
   const runningRoot = {
