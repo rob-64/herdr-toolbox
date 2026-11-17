@@ -152,7 +152,7 @@ export function subscribe(subscriptions, onEvent) {
         return;
       }
 
-      if (msg.type) onEvent(msg);
+      if (msg.event) onEvent(msg);
     }
   });
 

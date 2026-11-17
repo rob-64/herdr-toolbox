@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { request, snapshot, subscribe } from './herdr.mjs';
 import { plan, stripPrefix } from './labels.mjs';
+import { growPlan } from './focus.mjs';
 import {
   loadConfig,
   loadMru,
@@ -65,6 +66,7 @@ const BASE_SUBSCRIPTIONS = [
   { type: 'pane.moved' },
   { type: 'pane.updated' },
   { type: 'pane.agent_detected' },
+  { type: 'pane.focused' },
 ];
 
 function agentPaneSubscriptions(snap) {
@@ -110,6 +112,35 @@ async function applyRenames(renames, ownedBefore, tabsState) {
         tabsState.owned[tab_id] = ownedBefore[tab_id];
       }
     }
+  }
+}
+
+// One grow at a time, always for the most recently focused pane.
+let growTarget = null;
+let growing = false;
+
+async function growFocused(paneId) {
+  growTarget = paneId;
+  if (growing) return;
+  growing = true;
+  while (growTarget) {
+    const next = growTarget;
+    growTarget = null;
+    await growPane(next);
+  }
+  growing = false;
+}
+
+async function growPane(paneId) {
+  const share = loadConfig().focus_grow;
+  if (typeof share !== 'number' || share <= 0.5 || share >= 1) return;
+  try {
+    const { layout } = await request('pane.layout', { pane_id: paneId });
+    for (const { path, ratio } of growPlan(layout, paneId, share)) {
+      await request('layout.set_split_ratio', { tab_id: layout.tab_id, path, ratio });
+    }
+  } catch (error) {
+    logLine(`focus grow error ${paneId}: ${error.message}`);
   }
 }
 
@@ -211,7 +242,10 @@ async function watchDaemon() {
   function setupSubscription(snap) {
     return new Promise((resolve, reject) => {
       const subs = agentPaneSubscriptions(snap);
-      const sub = subscribe(subs, () => debouncedRefresh());
+      const sub = subscribe(subs, (msg) => {
+        if (msg.event === 'pane_focused' && msg.data?.pane_id) void growFocused(msg.data.pane_id);
+        debouncedRefresh();
+      });
       subscription = sub;
       sub.closed.catch((error) => {
         if (shuttingDown) return;
