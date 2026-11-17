@@ -332,7 +332,7 @@ Optional file: `HERDR_PLUGIN_CONFIG_DIR/config.json` (typically under your Herdr
 - `icons` — per-agent Nerd Font glyphs; merge over defaults. Set `"icons": false` to disable icons.
 - `status` — show Nerd Font status glyphs (e.g. 󱎖 working, 󰻂 blocked, 󰝥 done, 󰄬 idle, 󰝦 unknown). Set `false` to hide them.
 - `max_title` — max characters for the task title (truncated with `…`).
-- `focus_grow` — when you focus a pane, resize every split it sits in so the pane gets this share (between `0.5` and `1`, e.g. `0.65`). Off by default (`false`). Zoomed tabs are left alone.
+- `focus_grow` — when you focus a pane, resize every split it sits in so the pane gets this share (between `0.5` and `1`, e.g. `0.8`); every other split goes back to even, so panes that lost focus shrink back. Off by default (`false`). Zoomed tabs are left alone.
 
 Tab watcher state (MRU, owned labels, watcher PID) lives under `$HERDR_PLUGIN_STATE_DIR/tabs/`.
 

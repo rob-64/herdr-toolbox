@@ -28,15 +28,19 @@ test('splitPath decodes herdr split ids', () => {
   assert.deepEqual(splitPath('split_3_10'), [true, false]);
 });
 
-test('growPlan grows only the ancestor splits toward the focused pane', () => {
+test('growPlan grows the ancestor splits and evens out the rest', () => {
   assert.deepEqual(growPlan(layout, 'p7', 0.7), [
     { path: [], ratio: 0.30000000000000004 },
+    { path: [false], ratio: 0.5 },
     { path: [true], ratio: 0.30000000000000004 },
+    { path: [true, false], ratio: 0.5 },
     { path: [true, true], ratio: 0.30000000000000004 },
   ]);
   assert.deepEqual(growPlan(layout, 'p1', 0.7), [
     { path: [], ratio: 0.7 },
     { path: [false], ratio: 0.7 },
+    { path: [true, false], ratio: 0.5 },
+    { path: [true, true], ratio: 0.5 },
   ]);
 });
 

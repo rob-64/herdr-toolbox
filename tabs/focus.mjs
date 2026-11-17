@@ -22,7 +22,8 @@ function contains(outer, inner) {
 }
 
 /**
- * Ratio changes that grow `paneId` to `share` of each ancestor split.
+ * Ratio changes that grow `paneId` to `share` of each ancestor split and
+ * even out every other split, so panes that lost focus shrink back.
  * @param {{ panes: Array<{ pane_id: string, rect: object }>, splits: Array<object>, zoomed?: boolean }} layout
  * @param {string} paneId
  * @param {number} share fraction in (0.5, 1)
@@ -35,7 +36,10 @@ export function growPlan(layout, paneId, share) {
   const changes = [];
   for (const split of layout.splits) {
     const r = split.rect;
-    if (!contains(r, pane.rect)) continue;
+    if (!contains(r, pane.rect)) {
+      if (Math.abs(split.ratio - 0.5) >= 0.01) changes.push({ path: splitPath(split.id), ratio: 0.5 });
+      continue;
+    }
     const horizontal = split.direction === 'right';
     const start = horizontal ? r.x : r.y;
     const size = horizontal ? r.width : r.height;
