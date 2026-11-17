@@ -132,3 +132,10 @@ title = "Stop tab watcher"
 description = "Stop the tab watcher and strip icons/status from tabs it named"
 contexts = ["global"]
 command = ["bin/tabs", "stop"]
+
+[[actions]]
+id = "tabs-restart"
+title = "Restart tab watcher"
+description = "Restart the tab watcher, e.g. after a plugin update"
+contexts = ["global"]
+command = ["bin/tabs", "restart"]

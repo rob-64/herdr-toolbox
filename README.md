@@ -294,7 +294,7 @@ A background watcher that makes tabs and panes usable with agents:
 
 Requires a **Nerd Font** (e.g. Hack Nerd Font Mono) for agent and status glyphs (Material Design icons in the Nerd Font PUA, vertically aligned with the agent icon).
 
-On startup Herdr runs `tabs ensure`, which starts a background watcher. You can also use the **Start tab watcher** / **Stop tab watcher** plugin actions (`herdr-toolbox.tabs-start`, `herdr-toolbox.tabs-stop`).
+On startup Herdr runs `tabs ensure`, which starts a background watcher. You can also use the **Start tab watcher** / **Stop tab watcher** / **Restart tab watcher** plugin actions (`herdr-toolbox.tabs-start`, `herdr-toolbox.tabs-stop`, `herdr-toolbox.tabs-restart`; restart after a plugin update so the new code runs).
 
 ### Keybinding (last tab)
 

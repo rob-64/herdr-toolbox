@@ -403,8 +403,14 @@ async function main() {
     case 'stop':
       await stopWatcher();
       break;
+    case 'restart':
+      // Stop and start in one process: separate stop/start actions run
+      // concurrently, so start would see the old watcher still alive.
+      await stopWatcher();
+      ensureWatcher();
+      break;
     default:
-      console.error('tabs: usage: ensure | watch | last-tab | stop');
+      console.error('tabs: usage: ensure | watch | last-tab | stop | restart');
       process.exit(2);
   }
 }
