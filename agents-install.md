@@ -134,7 +134,7 @@ herdr server reload-config
 
 If `herdr config check` reports a key conflict, ask the user which key to use.
 
-Optional tab-title settings go in `config.json` in the plugin config dir
+Optional tab watcher settings (titles, icons, `focus_grow`) go in `config.json` in the plugin config dir
 (`herdr plugin config-dir herdr-toolbox`):
 
 ```json

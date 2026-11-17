@@ -2,7 +2,7 @@ id = "herdr-toolbox"
 name = "Herdr Toolbox"
 version = "0.3.0"
 min_herdr_version = "0.9.0"
-description = "Herdr toolbox: GitHub PR board, automatic tab titles with agent icons and status, alt-tab to the last tab, and live OmO agents and tasks boards"
+description = "Herdr toolbox: GitHub PR board, a tab watcher (automatic tab titles with agent icons and status, alt-tab to the last tab, grow the focused pane), and live OmO agents and tasks boards"
 platforms = ["linux", "macos"]
 
 [[build]]
@@ -121,14 +121,14 @@ command = ["bin/tabs", "last-tab"]
 
 [[actions]]
 id = "tabs-start"
-title = "Start tab titles"
-description = "Start automatic tab titles"
+title = "Start tab watcher"
+description = "Start the tab watcher: tab titles, last-tab history, focus grow"
 contexts = ["global"]
 command = ["bin/tabs", "ensure"]
 
 [[actions]]
 id = "tabs-stop"
-title = "Stop tab titles"
-description = "Stop automatic tab titles and strip icons/status from tabs it named"
+title = "Stop tab watcher"
+description = "Stop the tab watcher and strip icons/status from tabs it named"
 contexts = ["global"]
 command = ["bin/tabs", "stop"]

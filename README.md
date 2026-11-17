@@ -283,17 +283,18 @@ cp omo_extensions/*.js ~/.omo/agent/extensions/
 
 This replaces the third-party **`omo-herdr`** npm package — do not run both. If you still have it: `omo remove npm:omo-herdr`.
 
-## Tab titles, icons, alt-tab
+## Tab watcher
 
-Makes tabs usable with OmO agents:
+A background watcher that makes tabs and panes usable with agents:
 
 - **Automatic tab titles** from each agent's task title (not the live terminal title). Before the agent has a task title, the tab shows the agent's folder name (last segment of its working directory).
 - **Icons and status** in the tab bar, e.g. `󰏉 󱎖 Fix merge conflicts PR 7`.
 - **Last tab** action — MRU alt-tab across workspaces.
+- **Focus grow** (opt-in) — the focused pane takes a bigger share of its splits, horizontally and vertically. Set `focus_grow` in the config below.
 
 Requires a **Nerd Font** (e.g. Hack Nerd Font Mono) for agent and status glyphs (Material Design icons in the Nerd Font PUA, vertically aligned with the agent icon).
 
-On startup Herdr runs `tabs ensure`, which starts a background watcher. You can also use the **Start tab titles** / **Stop tab titles** plugin actions (`herdr-toolbox.tabs-start`, `herdr-toolbox.tabs-stop`).
+On startup Herdr runs `tabs ensure`, which starts a background watcher. You can also use the **Start tab watcher** / **Stop tab watcher** plugin actions (`herdr-toolbox.tabs-start`, `herdr-toolbox.tabs-stop`).
 
 ### Keybinding (last tab)
 
@@ -350,7 +351,7 @@ This plugin's description includes **Automatic tab titles**, so **herdr-bar** de
 - `board/` — live agents and tasks board (`main.mjs`, data/render)
 - `prs/` — GitHub PR board (`main.mjs`, data over `gh`, render)
 - `omo_extensions/` — OmO extensions: `/agents-board`, `/rename-tab`, and agent status
-- `tabs/` — automatic tab titles, icons, MRU state, and tests
+- `tabs/` — tab watcher: automatic tab titles, icons, MRU state, focus grow, and tests
 - `bin/agents-board` — launcher for the board
 - `bin/pr-board` — launcher for the PR board
 - `bin/tabs` — launcher for the tab watcher and actions
