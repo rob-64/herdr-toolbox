@@ -39,6 +39,7 @@ test('growPlan grows the ancestor splits and evens out the rest', () => {
   assert.deepEqual(growPlan(layout, 'p1', 0.7), [
     { path: [], ratio: 0.7 },
     { path: [false], ratio: 0.7 },
+    { path: [true], ratio: 0.5 },
     { path: [true, false], ratio: 0.5 },
     { path: [true, true], ratio: 0.5 },
   ]);
