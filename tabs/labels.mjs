@@ -36,14 +36,6 @@ const ALL_GLYPHS = new Set([...Object.values(STATUS_GLYPH), ...LEGACY_GLYPHS]);
 const ALL_ICONS = new Set(Object.values(DEFAULT_ICONS));
 
 /**
- * @param {string | undefined | null} status
- */
-export function glyphFor(status) {
-  if (!status || !(status in STATUS_GLYPH)) return STATUS_GLYPH.unknown;
-  return STATUS_GLYPH[status];
-}
-
-/**
  * @param {string | undefined} kind
  * @param {object} config
  */
@@ -57,7 +49,7 @@ export function iconFor(kind, config) {
 }
 
 /**
- * Remove leading icon + status glyph from a label we wrote.
+ * Remove the leading icon + status glyph that older versions wrote into tab labels.
  * @param {string} label
  */
 export function stripPrefix(label) {
@@ -217,19 +209,8 @@ export function plan(snapshot, state, config) {
         base = String(tab.number ?? '');
       }
     }
-    base = truncateTitle(base, config.max_title);
-
-    const parts = [];
-    if (config.icons !== false) {
-      const icon = iconFor(primary?.agent ?? primary?.display_agent, config);
-      if (icon) parts.push(icon);
-    }
-    if (config.status !== false) {
-      parts.push(glyphFor(primary?.agent_status));
-    }
-    if (base) parts.push(base);
-
-    const label = parts.join(' ');
+    const label = truncateTitle(base, config.max_title);
+    if (!label) continue;
     if (label !== tab.label) {
       renames.push({ tab_id: tabId, label });
       owned[tabId] = label;

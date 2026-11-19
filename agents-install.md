@@ -15,10 +15,10 @@ If `herdr` is missing or older than 0.9.0, stop and tell the user. If neither
 `bun` nor node 18+ is on `PATH`, stop and tell the user to install one
 (the plugin's build step fails without it).
 
-The tab icons need a Nerd Font in the user's terminal (for example Hack Nerd
-Font Mono). If you can't tell which font they use, mention it in your final
-report instead of guessing. Without one, icons show as boxes; the user can
-turn them off (step 5).
+The agent icons on the agents and tasks boards need a Nerd Font in the user's
+terminal (for example Hack Nerd Font Mono). If you can't tell which font they
+use, mention it in your final report instead of guessing. Without one, icons
+show as boxes; the user can turn them off (step 5).
 
 ## 2. Install
 
@@ -44,8 +44,8 @@ detects an agent. To start it now:
 herdr plugin action invoke herdr-toolbox.tabs-start
 ```
 
-Within a few seconds, tabs running an agent are renamed to
-`<icon> <status> <task title>`:
+Within a few seconds, tabs running an agent are renamed to the agent's task
+title:
 
 ```sh
 herdr tab list
@@ -134,15 +134,15 @@ herdr server reload-config
 
 If `herdr config check` reports a key conflict, ask the user which key to use.
 
-Optional tab watcher settings (titles, icons, `focus_grow`) go in `config.json` in the plugin config dir
+Optional settings (tab titles, board icons, `focus_grow`) go in `config.json` in the plugin config dir
 (`herdr plugin config-dir herdr-toolbox`):
 
 ```json
-{ "icons": false, "status": true, "max_title": 32 }
+{ "icons": false, "max_title": 32 }
 ```
 
-`"icons": false` turns icons off (use this when there's no Nerd Font). Changes
-apply within a few seconds.
+`"icons": false` turns the board icons off (use this when there's no Nerd Font).
+Changes apply within a few seconds.
 
 ## 6. Report
 
@@ -157,7 +157,7 @@ Tell the user:
 ## Uninstall
 
 ```sh
-herdr plugin action invoke herdr-toolbox.tabs-stop   # strips icons/status from renamed tabs
+herdr plugin action invoke herdr-toolbox.tabs-stop
 herdr plugin uninstall herdr-toolbox
 rm -f ~/.omo/agent/extensions/herdr-toolbox.js
 rm -f ~/.omo/agent/extensions/herdr-toolbox-status.js

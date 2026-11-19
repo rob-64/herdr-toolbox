@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_ICONS,
   folderName,
-  glyphFor,
   iconFor,
   plan,
   STATUS_GLYPH,
@@ -40,48 +39,59 @@ function agent(paneId, tabId, opts = {}) {
   };
 }
 
-const defaultConfig = { icons: {}, status: true, max_title: 32 };
+const defaultConfig = { icons: {}, max_title: 32 };
 
 describe('plan', () => {
   it('names unnamed tab with omo agent', () => {
     const snapshot = snap([tab('w0:t1', '1', 1)], [agent('w0:p1', 'w0:t1')]);
     const { renames, state } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
     assert.equal(renames.length, 1);
-    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.working} Fix login`);
-    assert.equal(state.owned['w0:t1'], renames[0].label);
+    assert.equal(renames[0].label, 'Fix login');
+    assert.equal(state.owned['w0:t1'], 'Fix login');
   });
 
   it('does not rename when label already matches owned', () => {
-    const label = `${OMO} ${STATUS_GLYPH.working} Fix login`;
-    const snapshot = snap([tab('w0:t1', label)], [agent('w0:p1', 'w0:t1')]);
+    const snapshot = snap([tab('w0:t1', 'Fix login')], [agent('w0:p1', 'w0:t1')]);
     const { renames } = plan(
       snapshot,
-      { owned: { 'w0:t1': label }, released: [] },
+      { owned: { 'w0:t1': 'Fix login' }, released: [] },
       defaultConfig,
     );
     assert.equal(renames.length, 0);
   });
 
-  it('updates glyph on status change', () => {
-    const old = `${OMO} ${STATUS_GLYPH.working} Fix login`;
+  it('does not rename on status change', () => {
     const snapshot = snap(
-      [tab('w0:t1', old)],
+      [tab('w0:t1', 'Fix login')],
       [agent('w0:p1', 'w0:t1', { agent_status: 'blocked' })],
     );
     const { renames } = plan(
       snapshot,
-      { owned: { 'w0:t1': old }, released: [] },
+      { owned: { 'w0:t1': 'Fix login' }, released: [] },
       defaultConfig,
     );
-    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.blocked} Fix login`);
+    assert.equal(renames.length, 0);
+  });
+
+  it('follows the agent title when it changes', () => {
+    const snapshot = snap(
+      [tab('w0:t1', 'Fix login')],
+      [agent('w0:p1', 'w0:t1', { title: 'Fix logout' })],
+    );
+    const { renames, state } = plan(
+      snapshot,
+      { owned: { 'w0:t1': 'Fix login' }, released: [] },
+      defaultConfig,
+    );
+    assert.equal(renames[0].label, 'Fix logout');
+    assert.equal(state.owned['w0:t1'], 'Fix logout');
   });
 
   it('releases tab when user renames owned tab', () => {
-    const owned = `${OMO} ${STATUS_GLYPH.working} Fix login`;
     const snapshot = snap([tab('w0:t1', 'My custom name')], [agent('w0:p1', 'w0:t1')]);
     const { renames, state } = plan(
       snapshot,
-      { owned: { 'w0:t1': owned }, released: [] },
+      { owned: { 'w0:t1': 'Fix login' }, released: [] },
       defaultConfig,
     );
     assert.equal(renames.length, 0);
@@ -101,7 +111,18 @@ describe('plan', () => {
     assert.equal(renames.length, 1);
   });
 
-  it('keeps ownership of bare label when agent leaves', () => {
+  it('keeps the label and ownership when agent leaves', () => {
+    const snapshot = snap([tab('w0:t1', 'Fix login')]);
+    const { renames, state } = plan(
+      snapshot,
+      { owned: { 'w0:t1': 'Fix login' }, released: [] },
+      defaultConfig,
+    );
+    assert.equal(renames.length, 0);
+    assert.equal(state.owned['w0:t1'], 'Fix login');
+  });
+
+  it('strips old prefix from owned tab when agent leaves', () => {
     const label = `${OMO} ${STATUS_GLYPH.working} Fix login`;
     const snapshot = snap([tab('w0:t1', label)]);
     const { renames, state } = plan(
@@ -113,22 +134,22 @@ describe('plan', () => {
     assert.equal(state.owned['w0:t1'], 'Fix login');
   });
 
-  it('reclaims tab when agent returns after bare rename', () => {
-    const label = `${OMO} ${STATUS_GLYPH.working} Fix login`;
-    const snapshot = snap([tab('w0:t1', label)]);
+  it('renames tab again when an agent returns', () => {
     const first = plan(
-      snapshot,
-      { owned: { 'w0:t1': label }, released: [] },
+      snap([tab('w0:t1', 'Fix login')]),
+      { owned: { 'w0:t1': 'Fix login' }, released: [] },
       defaultConfig,
     );
-    assert.equal(first.renames[0].label, 'Fix login');
-    assert.equal(first.state.owned['w0:t1'], 'Fix login');
+    assert.equal(first.renames.length, 0);
 
-    const restored = snap([tab('w0:t1', 'Fix login')], [agent('w0:p1', 'w0:t1')]);
-    const second = plan(restored, first.state, defaultConfig);
+    const returned = snap(
+      [tab('w0:t1', 'Fix login')],
+      [agent('w0:p1', 'w0:t1', { title: 'Next task' })],
+    );
+    const second = plan(returned, first.state, defaultConfig);
     assert.equal(second.renames.length, 1);
-    assert.equal(second.renames[0].label, `${OMO} ${STATUS_GLYPH.working} Fix login`);
-    assert.equal(second.state.owned['w0:t1'], `${OMO} ${STATUS_GLYPH.working} Fix login`);
+    assert.equal(second.renames[0].label, 'Next task');
+    assert.equal(second.state.owned['w0:t1'], 'Next task');
   });
 
   it('does not touch unowned tab without agents', () => {
@@ -146,25 +167,23 @@ describe('plan', () => {
       ],
     );
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
-    assert.match(renames[0].label, /Blocked task/);
-    assert.match(renames[0].label, new RegExp(STATUS_GLYPH.blocked));
+    assert.equal(renames[0].label, 'Blocked task');
   });
 
   it('uses tab number when title missing and agent has no cwd', () => {
     const snapshot = snap([tab('w0:t1', '1', 7)], [agent('w0:p1', 'w0:t1', { title: null })]);
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
-    assert.match(renames[0].label, /7$/);
+    assert.equal(renames[0].label, '7');
   });
 
   it('keeps previous base when owned and title missing and agent has no cwd', () => {
-    const label = `${OMO} ${STATUS_GLYPH.working} Keep this base`;
     const snapshot = snap(
-      [tab('w0:t1', label)],
+      [tab('w0:t1', 'Keep this base')],
       [agent('w0:p1', 'w0:t1', { title: null })],
     );
     const { renames } = plan(
       snapshot,
-      { owned: { 'w0:t1': label }, released: [] },
+      { owned: { 'w0:t1': 'Keep this base' }, released: [] },
       defaultConfig,
     );
     assert.equal(renames.length, 0);
@@ -182,7 +201,7 @@ describe('plan', () => {
       ],
     );
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
-    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.working} scratch`);
+    assert.equal(renames[0].label, 'scratch');
   });
 
   it('prefers foreground_cwd over cwd for folder name', () => {
@@ -197,7 +216,7 @@ describe('plan', () => {
       ],
     );
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
-    assert.match(renames[0].label, /new$/);
+    assert.equal(renames[0].label, 'new');
   });
 
   it('uses task title over folder name when both present', () => {
@@ -206,7 +225,7 @@ describe('plan', () => {
       [agent('w0:p1', 'w0:t1', { title: 'Fix login', cwd: '/Users/x/w/scratch' })],
     );
     const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
-    assert.match(renames[0].label, /Fix login$/);
+    assert.equal(renames[0].label, 'Fix login');
   });
 
   it('truncates long titles', () => {
@@ -220,40 +239,16 @@ describe('plan', () => {
       { owned: {}, released: [] },
       { ...defaultConfig, max_title: 10 },
     );
-    assert.match(renames[0].label, /A{9}…$/);
+    assert.equal(renames[0].label, `${'A'.repeat(9)}…`);
   });
 
-  it('respects icons:false and status:false', () => {
-    const snapshot = snap([tab('w0:t1', '1')], [agent('w0:p1', 'w0:t1')]);
-    const noIcons = plan(snapshot, { owned: {}, released: [] }, {
-      ...defaultConfig,
-      icons: false,
-    });
-    assert.equal(noIcons.renames[0].label, `${STATUS_GLYPH.working} Fix login`);
-
-    const noStatus = plan(snapshot, { owned: {}, released: [] }, {
-      ...defaultConfig,
-      status: false,
-    });
-    assert.equal(noStatus.renames[0].label, `${OMO} Fix login`);
-  });
-
-  it('uses default robot icon for unknown agent kind', () => {
-    const snapshot = snap(
-      [tab('w0:t1', '1')],
-      [agent('w0:p1', 'w0:t1', { agent: 'unknown-bot' })],
-    );
-    const { renames } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
-    assert.ok(renames[0].label.startsWith(DEFAULT_ICONS.default));
-  });
-
-  it('applies config icon override', () => {
+  it('leaves icons config out of tab labels', () => {
     const snapshot = snap([tab('w0:t1', '1')], [agent('w0:p1', 'w0:t1')]);
     const { renames } = plan(snapshot, { owned: {}, released: [] }, {
       ...defaultConfig,
       icons: { omo: '★' },
     });
-    assert.ok(renames[0].label.startsWith('★'));
+    assert.equal(renames[0].label, 'Fix login');
   });
 
   it('prunes closed tabs from owned and released', () => {
@@ -267,7 +262,7 @@ describe('plan', () => {
     assert.ok(!state.released.includes('w0:old'));
   });
 
-  it('claims tab with managed prefix after restart', () => {
+  it('claims tab with old managed prefix after restart', () => {
     const stale = `${OMO} ◐ Old task`;
     const snapshot = snap(
       [tab('w0:t1', stale)],
@@ -275,8 +270,8 @@ describe('plan', () => {
     );
     const { renames, state } = plan(snapshot, { owned: {}, released: [] }, defaultConfig);
     assert.equal(renames.length, 1);
-    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.working} New task`);
-    assert.equal(state.owned['w0:t1'], renames[0].label);
+    assert.equal(renames[0].label, 'New task');
+    assert.equal(state.owned['w0:t1'], 'New task');
   });
 
   it('does not claim prefixed label when tab is released', () => {
@@ -299,7 +294,23 @@ describe('plan', () => {
     assert.equal(renames.length, 0);
   });
 
-  it('migrates owned tab from legacy omo icon to md-omega', () => {
+  it('strips icon and status from owned tab', () => {
+    const ownedLabel = `${OMO} ${STATUS_GLYPH.working} Fix login`;
+    const snapshot = snap(
+      [tab('w0:t1', ownedLabel)],
+      [agent('w0:p1', 'w0:t1', { agent_status: 'blocked' })],
+    );
+    const { renames, state } = plan(
+      snapshot,
+      { owned: { 'w0:t1': ownedLabel }, released: [] },
+      defaultConfig,
+    );
+    assert.equal(renames.length, 1);
+    assert.equal(renames[0].label, 'Fix login');
+    assert.equal(state.owned['w0:t1'], 'Fix login');
+  });
+
+  it('strips legacy omo icon from owned tab', () => {
     const legacyOmo = '\u{F09DF}';
     const ownedLabel = `${legacyOmo} ✓ Fix login`;
     const snapshot = snap(
@@ -312,10 +323,10 @@ describe('plan', () => {
       defaultConfig,
     );
     assert.equal(renames.length, 1);
-    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.idle} Fix login`);
+    assert.equal(renames[0].label, 'Fix login');
   });
 
-  it('migrates owned tab from legacy status glyph to md glyphs', () => {
+  it('strips legacy status glyph from owned tab', () => {
     const ownedLabel = `${OMO} ◐ Fix login`;
     const snapshot = snap(
       [tab('w0:t1', ownedLabel)],
@@ -327,7 +338,7 @@ describe('plan', () => {
       defaultConfig,
     );
     assert.equal(renames.length, 1);
-    assert.equal(renames[0].label, `${OMO} ${STATUS_GLYPH.idle} Fix login`);
+    assert.equal(renames[0].label, 'Fix login');
   });
 });
 
@@ -346,11 +357,6 @@ describe('folderName', () => {
 });
 
 describe('helpers', () => {
-  it('glyphFor maps statuses', () => {
-    assert.equal(glyphFor('working'), STATUS_GLYPH.working);
-    assert.equal(glyphFor('nope'), STATUS_GLYPH.unknown);
-  });
-
   it('stripPrefix removes icon and glyph', () => {
     const label = `${OMO} ${STATUS_GLYPH.working} Fix login`;
     assert.equal(stripPrefix(label), 'Fix login');

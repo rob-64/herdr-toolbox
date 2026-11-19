@@ -109,7 +109,6 @@ let cachedConfig = null;
 
 const DEFAULT_CONFIG = {
   icons: {},
-  status: true,
   max_title: 32,
   focus_grow: false,
 };

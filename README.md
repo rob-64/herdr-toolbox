@@ -1,6 +1,6 @@
 # herdr-toolbox
 
-A [herdr](https://herdr.dev) plugin: a GitHub PR board, automatic tab titles with agent icons and status glyphs, and MRU alt-tab for any agent herdr detects, plus live agents and tasks boards for [OmO](https://github.com/code-yeongyu/oh-my-openagent).
+A [herdr](https://herdr.dev) plugin: a GitHub PR board, automatic tab titles, and MRU alt-tab for any agent herdr detects, plus live agents and tasks boards for [OmO](https://github.com/code-yeongyu/oh-my-openagent).
 
 ## Install
 
@@ -17,12 +17,12 @@ You don't need OmO for most of it:
 | Feature | Needs |
 | --- | --- |
 | PR board | [`gh`](https://cli.github.com), logged in (`gh auth login`) |
-| Tab titles, icons, status glyphs | Any agent herdr detects (Claude Code, Codex, Cursor, Copilot, Gemini, OpenCode, pi, OmO) |
+| Tab titles | Any agent herdr detects (Claude Code, Codex, Cursor, Copilot, Gemini, OpenCode, pi, OmO) |
 | Last tab (alt-tab) | Nothing extra |
 | Agents / tasks boards | OmO; without it they open and show empty lists |
 | `/agents-board`, `/pr-board`, `/rename-tab`, agent status | OmO (they are OmO extensions) |
 
-Without OmO, open the PR board with the `open-prs*` actions below. Live status glyphs for other agents come from herdr's own integrations (`herdr integration install`); without one, the tab shows the unknown glyph.
+Without OmO, open the PR board with the `open-prs*` actions below.
 
 Having a coding agent install it? Point it at [agents-install.md](agents-install.md): it covers the install, the OmO `/agents-board` extension, and keybindings.
 
@@ -81,7 +81,7 @@ Session header rows keep the old behavior: click toggles session scope; **Enter*
 
 ## Tasks board
 
-Shows OmO **todo** lists (the `todo` tool) as a **tree** per session: main-session phases and items, nested **subagent** rows (with their own todo lists), tree guides, and fold/unfold. Scope and session cycling work like the agents board (`g`, `[` `]`). Press **`f`** to cycle the **status** filter (`all`, `open`, in progress, pending, completed, abandoned). Press **`v`** or **Tab** to switch **Agents** / **DAG** / **Tasks**. Session and subagent rows show the agent/model-vendor icon from the same `icons` config as herdr tab titles (`~/.config/herdr/plugins/herdr-toolbox/config.json`).
+Shows OmO **todo** lists (the `todo` tool) as a **tree** per session: main-session phases and items, nested **subagent** rows (with their own todo lists), tree guides, and fold/unfold. Scope and session cycling work like the agents board (`g`, `[` `]`). Press **`f`** to cycle the **status** filter (`all`, `open`, in progress, pending, completed, abandoned). Press **`v`** or **Tab** to switch **Agents** / **DAG** / **Tasks**. Session and subagent rows show the agent/model-vendor icon from the `icons` config (`~/.config/herdr/plugins/herdr-toolbox/config.json`).
 
 ```
  OmO Tasks  GLOBAL   Agents  DAG  Tasks   filter:today   status:all
@@ -161,7 +161,7 @@ The session in the herdr pane you last focused is highlighted.
 
 ### What it shows
 
-- **Agents view**: one block per OmO session, labelled with its herdr pane and title. Open OmO panes are listed even when they have no subagents, so you can see which ones are working or waiting for input. Session headers and subagent rows show agent/model-vendor icons from the same `icons` config as herdr tab titles. Each subagent shows its status, agent or category, task summary, model, elapsed time, and turns/tool calls. Running tasks also show **context fill** (`ctx 62%` or `ctx 65k` when the window is unknown). **Failed tool calls** appear as `✖N` on any task. The live line under a running subagent prefixes **what it is waiting on** (`⏳ model 40s` or `⚒ bash 2m10s`) before the current tool detail and latest thought. In global scope, each session lists at most 5 finished subagents; `s` shows the rest.
+- **Agents view**: one block per OmO session, labelled with its herdr pane and title. Open OmO panes are listed even when they have no subagents, so you can see which ones are working or waiting for input. Session headers and subagent rows show agent/model-vendor icons from the `icons` config. Each subagent shows its status, agent or category, task summary, model, elapsed time, and turns/tool calls. Running tasks also show **context fill** (`ctx 62%` or `ctx 65k` when the window is unknown). **Failed tool calls** appear as `✖N` on any task. The live line under a running subagent prefixes **what it is waiting on** (`⏳ model 40s` or `⚒ bash 2m10s`) before the current tool detail and latest thought. In global scope, each session lists at most 5 finished subagents; `s` shows the rest.
 - **Tasks view**: the same context and error metrics appear on subagent tree rows (before done/total). Footer detail for a selected row includes context size and failed-tool-call counts when known.
 - **Live output viewer**: the header shows context fill, failed tools, and pending state beside `● following`.
 - **DAG view**: each `mass ulw` / DAG run with a progress bar, then its nodes by stage with dependencies (`← build`), route, attempt, and elapsed time. Node rows show `✖N` when the linked subagent had failed tool results. Failed nodes show their error.
@@ -288,11 +288,8 @@ This replaces the third-party **`omo-herdr`** npm package — do not run both. I
 A background watcher that makes tabs and panes usable with agents:
 
 - **Automatic tab titles** from each agent's task title (not the live terminal title). Before the agent has a task title, the tab shows the agent's folder name (last segment of its working directory).
-- **Icons and status** in the tab bar, e.g. `󰏉 󱎖 Fix merge conflicts PR 7`.
 - **Last tab** action — MRU alt-tab across workspaces.
 - **Focus grow** (opt-in) — the focused pane takes a bigger share of its splits, horizontally and vertically. Set `focus_grow` in the config below.
-
-Requires a **Nerd Font** (e.g. Hack Nerd Font Mono) for agent and status glyphs (Material Design icons in the Nerd Font PUA, vertically aligned with the agent icon).
 
 On startup Herdr runs `tabs ensure`, which starts a background watcher. You can also use the **Start tab watcher** / **Stop tab watcher** / **Restart tab watcher** plugin actions (`herdr-toolbox.tabs-start`, `herdr-toolbox.tabs-stop`, `herdr-toolbox.tabs-restart`; restart after a plugin update so the new code runs).
 
@@ -323,14 +320,12 @@ Optional file: `HERDR_PLUGIN_CONFIG_DIR/config.json` (typically under your Herdr
 ```json
 {
   "icons": { "omo": "󰏉" },
-  "status": true,
   "max_title": 32,
   "focus_grow": 0.65
 }
 ```
 
-- `icons` — per-agent Nerd Font glyphs; merge over defaults. Set `"icons": false` to disable icons.
-- `status` — show Nerd Font status glyphs (e.g. 󱎖 working, 󰻂 blocked, 󰝥 done, 󰄬 idle, 󰝦 unknown). Set `false` to hide them.
+- `icons` — per-agent Nerd Font glyphs on the agents and tasks boards (they need a **Nerd Font**, e.g. Hack Nerd Font Mono); merge over defaults. Set `"icons": false` to disable icons.
 - `max_title` — max characters for the task title (truncated with `…`).
 - `focus_grow` — when you focus a pane, resize every split it sits in so the pane gets this share (between `0.5` and `1`, e.g. `0.8`); every other split goes back to even, so panes that lost focus shrink back. Off by default (`false`). Zoomed tabs are left alone.
 
@@ -339,8 +334,6 @@ Tab watcher state (MRU, owned labels, watcher PID) lives under `$HERDR_PLUGIN_ST
 ### What gets renamed
 
 The watcher only claims tabs that look unnamed (numeric labels like `1`), stale `OmO - …` terminal titles, or tabs it already owns. Custom tab names you set yourself are left alone. If you rename a tab the plugin had named, that tab is released and never auto-renamed again.
-
-When the watcher stops, it strips icon/status prefixes from tabs it owned and restores plain titles.
 
 ### herdr-bar
 
@@ -351,7 +344,7 @@ This plugin's description includes **Automatic tab titles**, so **herdr-bar** de
 - `board/` — live agents and tasks board (`main.mjs`, data/render)
 - `prs/` — GitHub PR board (`main.mjs`, data over `gh`, render)
 - `omo_extensions/` — OmO extensions: `/agents-board`, `/rename-tab`, and agent status
-- `tabs/` — tab watcher: automatic tab titles, icons, MRU state, focus grow, and tests
+- `tabs/` — tab watcher: automatic tab titles, MRU state, focus grow, and tests
 - `bin/agents-board` — launcher for the board
 - `bin/pr-board` — launcher for the PR board
 - `bin/tabs` — launcher for the tab watcher and actions
